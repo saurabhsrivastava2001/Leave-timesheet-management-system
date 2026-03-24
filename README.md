@@ -1,51 +1,90 @@
-# Leave & Timesheet Management System
+# 🏢 Leave & Timesheet Management System
 
-Welcome to the **Leave & Timesheet Management System**, a scalable Spring Boot microservices architecture designed to handle employee timesheets, leave balancing, authentication, and core master data management.
+A robust, enterprise-grade Spring Boot microservices platform designed to orchestrate employee timesheet logging, leave applications, manager approvals, and identity management seamlessly.
+
+---
 
 ## 🏗️ Architecture & Component Services
 
-The platform consists of **7 distinct Spring Boot Microservices** working together in a robust ecosystem:
+This platform is divided into **7 specialized microservices**, which interact synchronously via Feign Clients and are routed through a central Gateway. 
 
-1. **`config-server` (Port 8888)**: The centralized configuration repository. It pulls configuration `.yml` properties from a remote GitHub repository (`leave-management-config`), supplying them dynamically to all other microservices at boot time.
-2. **`eureka-server` (Port 8761)**: The Netflix Eureka Service Registry. All independent services register their dynamic IPs and ports here, enabling seamless internal discovery.
-3. **`api-gateway` (Port 8080)**: The single entry point for client applications. It uses Spring Cloud Gateway to intelligently route HTTP requests to the appropriate microservices (load-balanced by Eureka). It also features a global `JwtAuthenticationFilter` to validate tokens securely.
-4. **`identity-service` (Port 8081)**: Manages Employee Identity, Signup, Login, and JWT generation processes. Connects to `leavemgt_identity` DB.
-5. **`timesheet-service` (Port 8082)**: Dedicated to capturing employee daily work hours logged against projects and summarizing them as weekly timesheets. Connects to `leavemgt_timesheet` DB.
-6. **`leave-service` (Port 8083)**: Manages holiday schedules, tracks employee leave balances, and handles new leave application requests by automatically validating rules (`such as ensuring enough balance`). Connects to `leavemgt_leave` DB.
-7. **`admin-service` (Port 8084)**: Acts as the orchestrator for core master data (e.g., Leave Policies) and managerial approvals. It communicates directly with Timesheet and Leave services over the internal network using Feign clients to approve/reject requests. Connects to `leavemgt_admin` DB.
-
-## 🛠️ Technology Stack
-- **Languages / Frameworks**: Java 17+, Spring Boot 3.x, Spring Cloud Ecosystem (Netflix Eureka, Config, Gateway)
-- **Database**: MySQL (Hibernate/JPA DDL-update managed schemas)
-- **Security**: JWT (JSON Web Tokens), BCrypt password hashing
-- **Interservice Communication**: OpenFeign (Synchronous), Eureka (Discovery)
-- **Documentation**: Springdoc OpenAPI v3 (Swagger UI centrally aggregated via Gateway)
-- **Event Bus / Messaging**: RabbitMQ dependencies available
-
-## 🚀 Getting Started
-
-### Database Setup
-Before starting the application, ensure you have MySQL running on `localhost:3306` and create the core databases. Thanks to Hibernate `ddl-auto: update`, tables define themselves automatically on boot!
-```sql
-CREATE DATABASE leavemgt_identity;
-CREATE DATABASE leavemgt_timesheet;
-CREATE DATABASE leavemgt_leave;
-CREATE DATABASE leavemgt_admin;
-```
-
-### The Boot Sequence (Critical)
-Because microservices depend on centralized config and discovery, **you must start the services in this exact order**:
-
-1. Start **`config-server`** -> Wait for it to fully initialize on port `8888`.
-2. Start **`eureka-server`** -> Wait for it to map on port `8761`. (Check `http://localhost:8761` in browser)
-3. Start **`api-gateway`** -> Listens on standard interface `8080`.
-4. Start the feature microservices: **`identity-service`**, **`timesheet-service`**, **`leave-service`**, **`admin-service`** in any order.
-
-### Using the APIs & Swagger
-Once everything is registered in Eureka, navigate to:
-**[http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)**
-
-Use the **"Select a definition"** dropdown in the top-right corner to browse between the different Swagger documentations associated with Identity, Leave, Admin, and Timesheet services dynamically routed through the Gateway.
+| Service Name | Port | Database Name | Primary Responsibility |
+| :--- | :--- | :--- | :--- |
+| **`config-server`** | `8888` | *None* | Centralized configuration hub. Pulls `.yml` properties from your GitHub config repository and serves them to all other services at boot. |
+| **`eureka-server`** | `8761` | *None* | Netflix Eureka Registry. All services register here with their dynamic IPs to allow internal discovery and load balancing. |
+| **`api-gateway`** | `8080` | *None* | The single entry point for all API traffic. Routes traffic to specific microservices based on paths (e.g., `/auth/**`). Secures endpoints using a global `JwtAuthenticationFilter`. |
+| **`identity-service`** | `8081` | `auth_db` | Handles User Registration, Authentication (Login), and JWT Token generation. |
+| **`timesheet-service`** | `8082` | `timesheet_db` | Captures daily work hours logged against projects and compiles them into weekly timesheets. |
+| **`leave-service`** | `8083` | `leave_db` | Manages holiday schedules, tracks employee leave balances, and processes new leave application requests. |
+| **`admin-service`** | `8084` | `admin_db` | The orchestrator for approving requests and managing master data (Leave Policies). It uses OpenFeign to tell Timesheet and Leave services when a request is approved. |
 
 ---
-*For detailed API payload definitions, refer to Swagger or the `API_DOCUMENTATION.md` file located in the root directory. To understand the operational flow and setup dummy data, see `usecase_flow.txt`!*
+
+## 🚀 Setup & Getting Started
+
+### 1. Database Setup (Fully Automated)
+You **DO NOT** need to manually create any databases or tables! 
+Ensure you have a MySQL server running on `localhost:3306` with the credentials configured in your GitHub config `yml` files (username: `root`, password: `Mahadev12@a`). 
+
+Because the JDBC URLs contain `createDatabaseIfNotExist=true` and Hibernate uses `ddl-auto: update`, **Spring Boot will automatically create the `auth_db`, `timesheet_db`, `leave_db`, and `admin_db` databases and all required tables the first time the services boot!**
+
+### 2. The Boot Sequence (Critical)
+Because microservices depend on centralized config and discovery, **you must start the services in this exact order**:
+
+1. **`config-server`** -> Wait for it to fully initialize on port `8888`.
+2. **`eureka-server`** -> Wait for it to map on port `8761`. (Check `http://localhost:8761` in your browser).
+3. **`api-gateway`** -> Wait for it to bind to port `8080`.
+4. **`identity-service`, `timesheet-service`, `leave-service`, `admin-service`** -> You can start these concurrently. Ensure they successfully register with Eureka.
+
+### 3. API Documentation (Swagger)
+Once everything is connected, you can browse all APIs comprehensively via the centralized Gateway Swagger UI:
+👉 **[http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)**
+
+*(Use the "Select a definition" dropdown in the top right to switch between the APIs for Identity, Leave, Admin, and Timesheet).*
+
+---
+
+## 🛣️ System Use Cases & Core Data Flow
+
+To successfully test the system end-to-end, you must understand the data dependencies. Below is the primary user journey and how the microservices interlink:
+
+### Stage 1: Initial Master Data Setup
+*Before an employee can do anything, specific data must exist.*
+1. **Create a Project:** An employee cannot log hours without a project. 
+   - *Action:* Manually insert a dummy project into the `timesheet_db.project` table: `INSERT INTO project (project_code, name, active) VALUES ('PRJ-ALPHA', 'Alpha Web App', true);`
+2. **Create a Leave Policy:** The system needs rules to calculate leave.
+   - *Action:* Send a `POST` request to `admin-service` (`/admin/master/policies`) to create a policy (e.g., Earned Leave).
+
+### Stage 2: Employee Onboarding & Authentication
+1. **Signup:** 
+   - *Action:* Hit `POST /api/auth/signup` (Routed to `identity-service`). Provide an `employeeCode` (e.g., `EMP001`), name, email, and password.
+2. **Login:** 
+   - *Action:* Hit `POST /api/auth/login`. You will receive a long `token` string. 
+   - *Required:* For all following requests, you must include this in the HTTP headers: `Authorization: Bearer <token>`.
+3. **Provide Leave Balance:**
+   - *Action:* Before applying for leave, `EMP001` needs a balance. Manually insert this into `leave_db.leave_balance`: `INSERT INTO leave_balance (employee_code, leave_type, balance) VALUES ('EMP001', 'EARNED', 20.0);`
+
+### Stage 3: The Daily Work Flow
+1. **Logging Hours:**
+   - *Action:* Employee makes a `POST /api/timesheets` request (Routed to `timesheet-service`), passing daily hours mapped to `PRJ-ALPHA`. 
+   - The timesheet is saved as a `DRAFT`.
+2. **Submitting for Approval:**
+   - *Action:* Employee calls `PUT /api/timesheets/{id}/submit`. Status changes to `SUBMITTED`.
+
+### Stage 4: Taking Time Off
+1. **Applying for Leave:**
+   - *Action:* Employee makes a `POST /api/leaves` request (Routed to `leave-service`). 
+   - *Internal Logic:* The `leave-service` internally queries its DB to ensure `EMP001` has enough balance (from the dummy data inserted earlier). If yes, the leave is created as `PENDING`.
+
+### Stage 5: Managerial Approvals (Microservice Interlinking)
+*The `admin-service` does not have timesheet or leave data in its own database. It orchestrates changes by communicating with the other services.*
+1. **Approve Timesheet/Leave:**
+   - *Action:* The manager hits the `admin-service` endpoints:
+     - `PUT /api/admin/approvals/timesheets/{id}?status=APPROVED`
+     - `PUT /api/admin/approvals/leaves/{id}?status=APPROVED`
+   - *Internal Logic:* `admin-service` uses **OpenFeign Clients** to make internal, secure HTTP calls directly to the `timesheet-service` and `leave-service`, commanding them to update the respective database rows to `APPROVED`.
+2. **Balance Deduction:**
+   - Once the Leave is approved, the `leave-service` permanently deducts the days from `EMP001`'s balance.
+
+---
+**Tech Stack:** Java 17+, Spring Boot 3.x, Spring Cloud Gateway/Config/Eureka, OpenFeign, JWT Security, MySQL, Swagger OpenAPI.
