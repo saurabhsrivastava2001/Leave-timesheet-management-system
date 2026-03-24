@@ -51,7 +51,7 @@ To successfully test the system end-to-end, you must understand the data depende
 ### Stage 1: Initial Master Data Setup
 *Before an employee can do anything, specific data must exist.*
 1. **Create a Project:** An employee cannot log hours without a project. 
-   - *Action:* Manually insert a dummy project into the `timesheet_db.project` table: `INSERT INTO project (project_code, name, active) VALUES ('PRJ-ALPHA', 'Alpha Web App', true);`
+   - *Action:* Manually insert a dummy project into the `timesheet_db.project` table: `INSERT INTO project (project_code, name, active, created_on) VALUES ('PRJ-ALPHA', 'Alpha Web App', 1, NOW());`
 2. **Create a Leave Policy:** The system needs rules to calculate leave.
    - *Action:* Send a `POST` request to `admin-service` (`/admin/master/policies`) to create a policy (e.g., Earned Leave).
 
@@ -62,7 +62,7 @@ To successfully test the system end-to-end, you must understand the data depende
    - *Action:* Hit `POST /api/auth/login`. You will receive a long `token` string. 
    - *Required:* For all following requests, you must include this in the HTTP headers: `Authorization: Bearer <token>`.
 3. **Provide Leave Balance:**
-   - *Action:* Before applying for leave, `EMP001` needs a balance. Manually insert this into `leave_db.leave_balance`: `INSERT INTO leave_balance (employee_code, leave_type, balance) VALUES ('EMP001', 'EARNED', 20.0);`
+   - *Action:* Before applying for leave, `EMP001` needs a balance. Manually insert this into `leave_db.leave_balance`: `INSERT INTO leave_balance (employee_code, leave_type, allocated, consumed) VALUES ('EMP001', 'EARNED', 20.0, 0.0);`
 
 ### Stage 3: The Daily Work Flow
 1. **Logging Hours:**

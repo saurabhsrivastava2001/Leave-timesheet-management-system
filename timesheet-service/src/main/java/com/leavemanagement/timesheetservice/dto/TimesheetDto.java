@@ -1,7 +1,6 @@
 package com.leavemanagement.timesheetservice.dto;
 
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 import java.util.List;
@@ -9,7 +8,7 @@ import java.util.List;
 public class TimesheetDto {
     private Long id;
     
-    @NotBlank(message = "Employee code is required")
+    
     private String employeeCode;
     
     @NotNull(message = "Week start date is required")

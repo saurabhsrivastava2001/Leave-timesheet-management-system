@@ -12,21 +12,21 @@ test the system locally.
 Before a user can traverse the entire flow seamlessly, certain "Master Data" 
 must exist in the system databases. 
 
-Database 1: `leavemgt_leave`
+Database 1: `leave_db`
 - You need a holiday to avoid having sick days fall on holidays.
     -> Expected Action: POST `/api/admin/master/holidays` (or equivalent) in Admin/Leave
 - You need initial Leave Balance data. Since the user doesn't exist yet, wait 
   until signup, but you must manually insert balance records so the leave 
   application doesn't fail due to "insufficient balance".
-    -> Expected Action: INSERT INTO leave_balance (employee_code, leave_type, balance) 
-                        VALUES ('EMP001', 'EARNED', 20.0);
+    -> Expected Action: INSERT INTO leave_balance (employee_code, leave_type, allocated, consumed) 
+                        VALUES ('EMP001', 'EARNED', 20.0, 0.0);
 
-Database 2: `leavemgt_timesheet`
+Database 2: `timesheet_db`
 - You cannot log hours towards a non-existent project.
     -> Expected Action: Manually insert a project to the database for testing.
-    -> INSERT INTO project (project_code, name, active) VALUES ('PRJ-ALPHA', 'Alpha Web App', true);
+    -> INSERT INTO project (project_code, name, active, created_on) VALUES ('PRJ-ALPHA', 'Alpha Web App', 1, NOW());
 
-Database 3: `leavemgt_admin`
+Database 3: `admin_db`
 - Need active leave policies so that leave calculations know rules like Carry-forward limits.
     -> Expected Action: POST `/api/admin/master/policies` payload to create a Leave Policy.
 

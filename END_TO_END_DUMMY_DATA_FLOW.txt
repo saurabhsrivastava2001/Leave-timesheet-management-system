@@ -1,0 +1,150 @@
+================================================================================
+           LEAVE & TIMESHEET MANAGEMENT SYSTEM: END-TO-END DUMMY DATA FLOW
+================================================================================
+
+This document provides the exact SQL statements and API JSON payloads required to 
+perform a flawless, end-to-end test of the entire microservices architecture.
+
+Please execute these steps in this EXACT sequence.
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+STEP 1: MANUAL DATABASE INJECTIONS (SQL)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Before hitting any APIs, run these SQL commands in your MySQL client to establish 
+the foundational missing master data.
+
+1. Create a Dummy Project (Timesheet Service)
+   -> Run this on the `timesheet_db` database:
+   INSERT INTO project (project_code, name, active, created_on) 
+   VALUES ('PRJ-ALPHA', 'Alpha Web App', 1, NOW());
+
+2. Create Initial Leave Balance (Leave Service)
+   -> Run this on the `leave_db` database:
+   INSERT INTO leave_balance (employee_code, leave_type, allocated, consumed) 
+   VALUES ('EMP001', 'EARNED', 25.0, 0.0);
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+STEP 2: IDENTITY & AUTHENTICATION (Swagger: Identity Service)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+1. SIGNUP AN EMPLOYEE
+   -> Method: POST
+   -> URL: http://localhost:8080/api/auth/signup
+   -> Payload:
+   {
+     "employeeCode": "EMP001",
+     "name": "Jane Developer",
+     "email": "jane@company.com",
+     "password": "SecurePassword123"
+   }
+
+2. LOGIN TO GET JWT TOKEN
+   -> Method: POST
+   -> URL: http://localhost:8080/api/auth/login
+   -> Payload:
+   {
+     "usernameOrEmail": "EMP001",
+     "password": "SecurePassword123"
+   }
+   -> ACTION: Copy the "token" value from the response. 
+   -> You MUST add "Authorization: Bearer <token>" as a header to all following steps!
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+STEP 3: MASTER DATA SETUP VIA APIs (Swagger: Admin / Leave Services)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+1. CREATE A LEAVE POLICY
+   -> Method: POST
+   -> URL: http://localhost:8080/api/admin/master/policies
+   -> Payload:
+   {
+     "policyCode": "EARNED_LEAVE_POLICY",
+     "leaveType": "EARNED",
+     "annualAllocation": 25.0,
+     "carryForwardAllowed": true,
+     "maxCarryForwardDays": 5.0
+   }
+
+2. CREATE A HOLIDAY
+   -> Method: POST
+   -> URL: http://localhost:8080/api/admin/master/holidays
+   -> Payload:
+   {
+     "date": "2026-12-25",
+     "description": "Christmas Day"
+   }
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+STEP 4: EMPLOYEE ACTIONS (Swagger: Timesheet & Leave Services)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+1. LOG WEEKLY TIMESHEET ENTRIES 
+   -> Method: POST
+   -> URL: http://localhost:8080/api/timesheet/entries
+   -> Payload:
+   {
+     "weekStartDate": "2026-03-23",
+     "entries": [
+       {
+         "projectCode": "PRJ-ALPHA",
+         "workDate": "2026-03-23",
+         "hours": 8.0,
+         "taskSummary": "Monday - Developed Login Authentication APIs"
+       },
+       {
+         "projectCode": "PRJ-ALPHA",
+         "workDate": "2026-03-24",
+         "hours": 8.0,
+         "taskSummary": "Tuesday - Wrote unit tests for Login"
+       },
+       {
+         "projectCode": "PRJ-ALPHA",
+         "workDate": "2026-03-25",
+         "hours": 8.0,
+         "taskSummary": "Wednesday - Integrated Identity Service"
+       },
+       {
+         "projectCode": "PRJ-ALPHA",
+         "workDate": "2026-03-26",
+         "hours": 8.0,
+         "taskSummary": "Thursday - Code Review and bug fixes"
+       },
+       {
+         "projectCode": "PRJ-ALPHA",
+         "workDate": "2026-03-27",
+         "hours": 8.0,
+         "taskSummary": "Friday - Deployment and Documentation"
+       }
+     ]
+   }
+
+2. SUBMIT TIMESHEET FOR MANAGER REVIEW
+   -> Method: POST
+   -> URL: http://localhost:8080/api/timesheet/weeks/2026-03-23/submit
+   -> Note: Assuming the timesheet ID returned in the previous step generated a week for "2026-03-23". 
+
+3. APPLY FOR TIME OFF
+   -> Method: POST
+   -> URL: http://localhost:8080/api/leave/requests
+   -> Payload:
+   {
+     "leaveType": "EARNED",
+     "startDate": "2026-05-10",
+     "endDate": "2026-05-13",
+     "reason": "Family Vacation Trip"
+   }
+   -> Note: The Leave Service will verify the balance we injected in Step 1 to approve this. Keep the 'id' returned by this response!
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+STEP 5: MANAGERIAL APPROVALS ROUNDTRIP (Swagger: Admin Service)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+1. APPROVE THE TIMESHEET
+   -> Method: PUT 
+   -> URL: http://localhost:8080/api/admin/approvals/timesheets/1?status=APPROVED&comments=Great%20Job
+   -> Note: Replace '1' in the URL with the actual ID of the submitted timesheet. Admin service uses Feign to update the Timesheet database securely.
+
+2. APPROVE THE LEAVE
+   -> Method: PUT 
+   -> URL: http://localhost:8080/api/admin/approvals/leaves/1?status=APPROVED&comments=Enjoy%20your%20trip
+   -> Note: Replace '1' in the URL with the actual ID of the leave request. Admin service communicates with Leave service, causing it to deduct 4 days from 'EMP001's consumed balance automatically!
