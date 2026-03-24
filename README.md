@@ -6,7 +6,7 @@ A robust, enterprise-grade Spring Boot microservices platform designed to orches
 
 ## 🏗️ Architecture & Component Services
 
-This platform is divided into **7 specialized microservices**, which interact synchronously via Feign Clients and are routed through a central Gateway. 
+This platform is divided into **7 specialized microservices**, which interact via high-speed asynchronous Event Streaming (RabbitMQ) and synchronous OpenFeign clients, all routed through a resilient, fault-tolerant central Gateway.
 
 | Service Name | Port | Database Name | Primary Responsibility |
 | :--- | :--- | :--- | :--- |
@@ -16,7 +16,7 @@ This platform is divided into **7 specialized microservices**, which interact sy
 | **`identity-service`** | `8081` | `auth_db` | Handles User Registration, Authentication (Login), and JWT Token generation. |
 | **`timesheet-service`** | `8082` | `timesheet_db` | Captures daily work hours logged against projects and compiles them into weekly timesheets. |
 | **`leave-service`** | `8083` | `leave_db` | Manages holiday schedules, tracks employee leave balances, and processes new leave application requests. |
-| **`admin-service`** | `8084` | `admin_db` | The orchestrator for approving requests and managing master data (Leave Policies). It uses OpenFeign to tell Timesheet and Leave services when a request is approved. |
+| **`admin-service`** | `8084` | `admin_db` | The orchestrator for approving requests and managing master data (Leave Policies). It publishes asynchronous Events to RabbitMQ to update Timesheet and Leave services seamlessly. |
 
 ---
 
@@ -82,9 +82,11 @@ To successfully test the system end-to-end, you must understand the data depende
    - *Action:* The manager hits the `admin-service` endpoints:
      - `PUT /api/admin/approvals/timesheets/{id}?status=APPROVED`
      - `PUT /api/admin/approvals/leaves/{id}?status=APPROVED`
-   - *Internal Logic:* `admin-service` uses **OpenFeign Clients** to make internal, secure HTTP calls directly to the `timesheet-service` and `leave-service`, commanding them to update the respective database rows to `APPROVED`.
+   - *Internal Logic:* `admin-service` implements an **Asynchronous Event-Driven Architecture**. Instead of waiting for slower REST API calls, the Admin Service instantly publishes a JSON event payload to a **RabbitMQ Exchange**. 
+   - The `timesheet-service` and `leave-service` act as independent **Consumers**, silently catching these messages from their queues and seamlessly updating the underlying databases in the background. If a service is down, the message waits safely in the queue until the service reboots!
+   - Every read-call or API edge route is guarded by **Resilience4j Circuit Breakers** which provide instant clean JSON fallbacks to users instead of crashing servers during outages.
 2. **Balance Deduction:**
    - Once the Leave is approved, the `leave-service` permanently deducts the days from `EMP001`'s balance.
 
 ---
-**Tech Stack:** Java 17+, Spring Boot 3.x, Spring Cloud Gateway/Config/Eureka, OpenFeign, JWT Security, MySQL, Swagger OpenAPI.
+**Tech Stack:** Java 17+, Spring Boot 3.x, Spring Cloud Gateway/Config/Eureka, OpenFeign, RabbitMQ (AMQP), Resilience4j Circuit Breakers, JWT Security, MySQL, Swagger OpenAPI.
