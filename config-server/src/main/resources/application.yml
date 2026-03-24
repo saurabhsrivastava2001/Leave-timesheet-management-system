@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: config-server
+  cloud:
+    config:
+      server:
+        git:
+          uri: https://github.com/saurabhsrivastava2001/leave-management-config
+          default-label: main
+          clone-on-start: true
+server:
+  port: 8888

@@ -1,0 +1,84 @@
+=============================================================================
+             LEAVE & TIMESHEET MANAGEMENT SYSTEM: USE CASE DATA FLOW         
+=============================================================================
+
+This document outlines how the microservices are interlinked, the expected 
+flow of operations, and the initial database records you must create to successfully
+test the system locally.
+
+-----------------------------------------------------------------------------
+1. THE PRE-REQUISITES (INITIAL DATA INJECTION)
+-----------------------------------------------------------------------------
+Before a user can traverse the entire flow seamlessly, certain "Master Data" 
+must exist in the system databases. 
+
+Database 1: `leavemgt_leave`
+- You need a holiday to avoid having sick days fall on holidays.
+    -> Expected Action: POST `/api/admin/master/holidays` (or equivalent) in Admin/Leave
+- You need initial Leave Balance data. Since the user doesn't exist yet, wait 
+  until signup, but you must manually insert balance records so the leave 
+  application doesn't fail due to "insufficient balance".
+    -> Expected Action: INSERT INTO leave_balance (employee_code, leave_type, balance) 
+                        VALUES ('EMP001', 'EARNED', 20.0);
+
+Database 2: `leavemgt_timesheet`
+- You cannot log hours towards a non-existent project.
+    -> Expected Action: Manually insert a project to the database for testing.
+    -> INSERT INTO project (project_code, name, active) VALUES ('PRJ-ALPHA', 'Alpha Web App', true);
+
+Database 3: `leavemgt_admin`
+- Need active leave policies so that leave calculations know rules like Carry-forward limits.
+    -> Expected Action: POST `/api/admin/master/policies` payload to create a Leave Policy.
+
+-----------------------------------------------------------------------------
+2. THE EXPECTED USER JOURNEY (FLOW)
+-----------------------------------------------------------------------------
+
+STEP 1: EMPLOYEE ONBOARDING [Identity Service]
+-> Hit Gateway endpoint `POST /api/auth/signup`
+-> Payload contains: { "employeeCode": "EMP001", "name": "John Doe", "password": "pass" }
+-> The `identity-service` processes this and creates an active user record.
+
+STEP 2: AUTHENTICATION [Identity Service]
+-> Hit Gateway endpoint `POST /api/auth/login`
+-> Pass username ("EMP001") and password.
+-> The service returns a JWT Token. Keep this! You'll pass `Authorization: Bearer <token>`
+   in all subsequent requests.
+
+STEP 3: LOGGING WEEKLY WORK [Timesheet Service]
+-> Hit Gateway endpoint `POST /api/timesheets`
+-> Payload provides week dates, and a list of Daily Entries mapped to `PRJ-ALPHA`.
+-> Timesheet calculates total hours and saves the sheet in "DRAFT" status.
+-> Call `PUT /api/timesheets/{id}/submit` to push status to "SUBMITTED" so a manager can see it.
+
+STEP 4: APPLYING FOR LEAVE [Leave Service]
+-> Hit Gateway endpoint `POST /api/leaves`
+-> Payload contains 'EARNED' leave, and start/end dates.
+-> ** Behind the scenes:** The `leave-service` validates that 'EMP001' has an entry
+   in `leave_balance` table > total days requested. If successful, creates "PENDING" leave.
+
+STEP 5: MANAGERIAL APPROVAL [Admin Service via Feign]
+-> The Admin interacts as the Manager using `admin-service`. 
+-> Hit Gateway `PUT /api/admin/approvals/timesheets/{sheetId}?status=APPROVED`
+-> Hit Gateway `PUT /api/admin/approvals/leaves/{leaveId}?status=APPROVED`
+-> ** How SERVICES INTERLINK:** `admin-service` does NOT have timesheets or leaves in its
+   own database. Instead, it utilizes OpenFeign Clients to make internal HTTP requests
+   directly to `timesheet-service` and `leave-service`, instructing them to update their
+   respective statuses to APPROVED.
+
+STEP 6: BALANCE DEDUCTION (Asynchronous/Synchronous Process)
+-> Upon the Leave being successfully approved by `Leave Service` (triggered by Admin), 
+   the Leave Service reduces the 'EARNED' balance for 'EMP001' by the requested days.
+
+-----------------------------------------------------------------------------
+3. SUMMARY OF MICROSERVICE LINKS (THE NETWORK GRAPH)
+-----------------------------------------------------------------------------
+[User] 
+  |-(HTTPS)-> 
+[API Gateway]
+  |--(/api/auth)--> [Identity Service] -> Token Gen.
+  |--(/api/timesheet)-> [Timesheet Service] -> Stores Logs
+  |--(/api/leave)--> [Leave Service] -> Validates Balances
+  |--(/api/admin)--> [Admin Service] 
+                      |---(Feign /internal)--> [Timesheet Service] (Approval Sync)
+                      |---(Feign /internal)--> [Leave Service] (Approval Sync)

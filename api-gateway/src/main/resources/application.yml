@@ -1,0 +1,68 @@
+spring:
+  application:
+    name: api-gateway
+  config:
+    import: configserver:http://localhost:8888
+  cloud:
+    gateway:
+      routes:
+        - id: identity-service
+          uri: lb://IDENTITY-SERVICE
+          predicates:
+            - Path=/api/auth/**
+        - id: timesheet-service
+          uri: lb://TIMESHEET-SERVICE
+          predicates:
+            - Path=/api/timesheet/**
+          filters:
+            - JwtAuthenticationFilter
+        - id: leave-service
+          uri: lb://LEAVE-SERVICE
+          predicates:
+            - Path=/api/leave/**, /api/holidays/**
+          filters:
+            - JwtAuthenticationFilter
+        - id: admin-service
+          uri: lb://ADMIN-SERVICE
+          predicates:
+            - Path=/api/admin/**
+          filters:
+            - JwtAuthenticationFilter
+        - id: openapi-identity
+          uri: lb://IDENTITY-SERVICE
+          predicates:
+            - Path=/v3/api-docs/identity
+          filters:
+            - RewritePath=/v3/api-docs/identity, /v3/api-docs
+        - id: openapi-timesheet
+          uri: lb://TIMESHEET-SERVICE
+          predicates:
+            - Path=/v3/api-docs/timesheet
+          filters:
+            - RewritePath=/v3/api-docs/timesheet, /v3/api-docs
+        - id: openapi-leave
+          uri: lb://LEAVE-SERVICE
+          predicates:
+            - Path=/v3/api-docs/leave
+          filters:
+            - RewritePath=/v3/api-docs/leave, /v3/api-docs
+        - id: openapi-admin
+          uri: lb://ADMIN-SERVICE
+          predicates:
+            - Path=/v3/api-docs/admin
+          filters:
+            - RewritePath=/v3/api-docs/admin, /v3/api-docs
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    disable-swagger-default-url: true
+    urls:
+      - name: Identity Service
+        url: /v3/api-docs/identity
+      - name: Timesheet Service
+        url: /v3/api-docs/timesheet
+      - name: Leave Service
+        url: /v3/api-docs/leave
+      - name: Admin Service
+        url: /v3/api-docs/admin
