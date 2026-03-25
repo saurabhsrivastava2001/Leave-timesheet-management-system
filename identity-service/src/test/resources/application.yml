@@ -1,0 +1,11 @@
+spring:
+  cloud:
+    config:
+      enabled: false
+  sql:
+    init:
+      mode: always
+
+eureka:
+  client:
+    enabled: false
