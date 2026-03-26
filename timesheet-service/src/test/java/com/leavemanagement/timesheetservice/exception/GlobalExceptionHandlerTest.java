@@ -1,4 +1,4 @@
-package com.leavemanagement.identityservice.exception;
+package com.leavemanagement.timesheetservice.exception;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
@@ -14,42 +14,45 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-public class IdentityExceptionHandlerTest {
+public class GlobalExceptionHandlerTest {
 
     private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
 
     @Test
     void testHandleResourceNotFoundException() {
-        ResponseEntity<Map<String, String>> response = handler.handleResourceNotFoundException(new ResourceNotFoundException("Not found"));
+        ResourceNotFoundException ex = new ResourceNotFoundException("Not found");
+        ResponseEntity<Map<String, String>> response = handler.handleResourceNotFoundException(ex);
         assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
         assertEquals("Not found", response.getBody().get("error"));
     }
 
     @Test
     void testHandleBadRequestException() {
-        ResponseEntity<Map<String, String>> response = handler.handleBadRequestException(new BadRequestException("Bad request"));
+        BadRequestException ex = new BadRequestException("Bad input");
+        ResponseEntity<Map<String, String>> response = handler.handleBadRequestException(ex);
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertEquals("Bad request", response.getBody().get("error"));
+        assertEquals("Bad input", response.getBody().get("error"));
     }
 
     @Test
     void testHandleValidationExceptions() {
         MethodArgumentNotValidException ex = mock(MethodArgumentNotValidException.class);
         BindingResult bindingResult = mock(BindingResult.class);
-        FieldError fieldError = new FieldError("signupRequest", "email", "Email is required");
+        FieldError fieldError = new FieldError("timesheetDto", "weekStartDate", "Week start date is required");
 
         when(ex.getBindingResult()).thenReturn(bindingResult);
         when(bindingResult.getAllErrors()).thenReturn(List.of(fieldError));
 
         ResponseEntity<Map<String, String>> response = handler.handleValidationExceptions(ex);
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertEquals("Email is required", response.getBody().get("email"));
+        assertEquals("Week start date is required", response.getBody().get("weekStartDate"));
     }
 
     @Test
     void testHandleGlobalException() {
-        ResponseEntity<Map<String, String>> response = handler.handleGlobalException(new Exception("Test error"));
+        Exception ex = new Exception("Server down");
+        ResponseEntity<Map<String, String>> response = handler.handleGlobalException(ex);
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
-        assertEquals("An unexpected error occurred: Test error", response.getBody().get("error"));
+        assertEquals("An unexpected error occurred: Server down", response.getBody().get("error"));
     }
 }

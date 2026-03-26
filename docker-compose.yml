@@ -1,0 +1,189 @@
+services:
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: leave-management-rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+
+  config-server:
+    build:
+      context: ./config-server
+    container_name: leave-management-config-server
+    ports:
+      - "8888:8888"
+    environment:
+      SERVER_PORT: 8888
+      SPRING_CLOUD_CONFIG_SERVER_GIT_URI: ${CONFIG_REPO_URI:-https://github.com/saurabhsrivastava2001/leave-management-config}
+      SPRING_CLOUD_CONFIG_SERVER_GIT_DEFAULT_LABEL: ${CONFIG_REPO_BRANCH:-main}
+      SPRING_CLOUD_CONFIG_SERVER_GIT_CLONE_ON_START: "true"
+    restart: unless-stopped
+
+  eureka-server:
+    build:
+      context: ./eureka-server
+    container_name: leave-management-eureka-server
+    depends_on:
+      - config-server
+    ports:
+      - "8761:8761"
+    environment:
+      SERVER_PORT: 8761
+    restart: unless-stopped
+
+  identity-service:
+    build:
+      context: ./identity-service
+    container_name: leave-management-identity-service
+    depends_on:
+      config-server:
+        condition: service_started
+      eureka-server:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    entrypoint: ["sh", "-c", "sleep 55 && java -jar /app/app.jar"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8081:8081"
+    environment:
+      SERVER_PORT: 8081
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_DATASOURCE_URL: jdbc:mysql://host.docker.internal:3306/auth_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USERNAME:-root}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-Mahadev12@a}
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+    restart: unless-stopped
+
+  timesheet-service:
+    build:
+      context: ./timesheet-service
+    container_name: leave-management-timesheet-service
+    depends_on:
+      config-server:
+        condition: service_started
+      eureka-server:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    entrypoint: ["sh", "-c", "sleep 55 && java -jar /app/app.jar"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8082:8082"
+    environment:
+      SERVER_PORT: 8082
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_DATASOURCE_URL: jdbc:mysql://host.docker.internal:3306/timesheet_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USERNAME:-root}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-Mahadev12@a}
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+    restart: unless-stopped
+
+  leave-service:
+    build:
+      context: ./leave-service
+    container_name: leave-management-leave-service
+    depends_on:
+      config-server:
+        condition: service_started
+      eureka-server:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    entrypoint: ["sh", "-c", "sleep 55 && java -jar /app/app.jar"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8083:8083"
+    environment:
+      SERVER_PORT: 8083
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_DATASOURCE_URL: jdbc:mysql://host.docker.internal:3306/leave_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USERNAME:-root}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-Mahadev12@a}
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+    restart: unless-stopped
+
+  admin-service:
+    build:
+      context: ./admin-service
+    container_name: leave-management-admin-service
+    depends_on:
+      config-server:
+        condition: service_started
+      eureka-server:
+        condition: service_started
+      rabbitmq:
+        condition: service_healthy
+    entrypoint: ["sh", "-c", "sleep 55 && java -jar /app/app.jar"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8084:8084"
+    environment:
+      SERVER_PORT: 8084
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+      SPRING_DATASOURCE_URL: jdbc:mysql://host.docker.internal:3306/admin_db?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USERNAME:-root}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-Mahadev12@a}
+      SPRING_DATASOURCE_DRIVER_CLASS_NAME: com.mysql.cj.jdbc.Driver
+      SPRING_JPA_HIBERNATE_DDL_AUTO: update
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USERNAME:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+    restart: unless-stopped
+
+  api-gateway:
+    build:
+      context: ./api-gateway
+    container_name: leave-management-api-gateway
+    depends_on:
+      config-server:
+        condition: service_started
+      eureka-server:
+        condition: service_started
+      identity-service:
+        condition: service_started
+      timesheet-service:
+        condition: service_started
+      leave-service:
+        condition: service_started
+      admin-service:
+        condition: service_started
+    entrypoint: ["sh", "-c", "sleep 70 && java -jar /app/app.jar"]
+    ports:
+      - "8080:8080"
+    environment:
+      SERVER_PORT: 8080
+      CONFIG_SERVER_URL: http://config-server:8888
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://eureka-server:8761/eureka/
+    restart: unless-stopped

@@ -1,0 +1,10 @@
+.git
+.metadata
+.m2
+.vscode
+**/target
+**/.classpath
+**/.factorypath
+**/.project
+**/.settings
+
