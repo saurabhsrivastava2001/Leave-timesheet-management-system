@@ -1,0 +1,28 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: leave-management
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: leave-management
+          __path__: /var/log/leave-management/*/*.log
+
+    pipeline_stages:
+      - match:
+          selector: '{job="leave-management"}'
+          stages:
+            - regex:
+                source: filename
+                expression: '.*/(?P<service>[^/]+)/[^/]+\.log'
+            - labels:
+                service:

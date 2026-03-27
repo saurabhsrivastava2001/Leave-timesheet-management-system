@@ -20,14 +20,14 @@ public class AdminPolicyService {
     public List<LeavePolicyDto> getAllPolicies() {
         return leavePolicyRepository.findAll().stream().map(this::mapToDto).collect(Collectors.toList());
     }
-
+createOrUpdatePolicy
     public LeavePolicyDto getPolicyByCode(String code) {
         LeavePolicy policy = leavePolicyRepository.findByPolicyCode(code)
                 .orElseThrow(() -> new ResourceNotFoundException("Policy not found with code: " + code));
         return mapToDto(policy);
     }
 
-    public LeavePolicyDto createOrUpdatePolicy(LeavePolicyDto dto) {
+    public LeavePolicyDto (LeavePolicyDto dto) {
         LeavePolicy policy = leavePolicyRepository.findByPolicyCode(dto.getPolicyCode()).orElse(new LeavePolicy());
         policy.setPolicyCode(dto.getPolicyCode());
         policy.setLeaveType(dto.getLeaveType());

@@ -90,3 +90,64 @@ To successfully test the system end-to-end, you must understand the data depende
 
 ---
 **Tech Stack:** Java 17+, Spring Boot 3.x, Spring Cloud Gateway/Config/Eureka, OpenFeign, RabbitMQ (AMQP), Resilience4j Circuit Breakers, JWT Security, MySQL, Swagger OpenAPI.
+
+---
+
+## Observability With Loki and Grafana
+
+The Docker Compose stack now includes a lightweight log observability pipeline:
+
+| Component | Port | Purpose |
+| :--- | :--- | :--- |
+| **`loki`** | `3100` | Central log store |
+| **`grafana`** | `3000` | Log exploration UI |
+| **`promtail`** | `9080` | Ships Spring Boot log files into Loki |
+
+### How It Works
+
+- Each Spring Boot container now writes logs to `/logs/app.log`.
+- Those log files are mounted into `./observability/logs/<service-name>/app.log` on the host.
+- `promtail` tails those files and adds a `service` label based on the folder name.
+- Grafana is pre-provisioned with Loki as the default datasource.
+
+### Start the Full Stack
+
+Run:
+
+```bash
+docker compose up --build
+```
+
+### Open the UIs
+
+- Grafana: [http://localhost:3000](http://localhost:3000)
+- Loki API: [http://localhost:3100/ready](http://localhost:3100/ready)
+- Swagger Gateway: [http://localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html)
+
+Default Grafana login:
+
+- Username: `admin`
+- Password: `admin`
+
+You can override these with:
+
+- `GRAFANA_ADMIN_USER`
+- `GRAFANA_ADMIN_PASSWORD`
+
+### View Logs in Grafana
+
+After logging in to Grafana:
+
+1. Open **Explore**.
+2. Select the **Loki** datasource.
+3. Run a query such as:
+
+```logql
+{job="leave-management"}
+```
+
+Or filter a single service:
+
+```logql
+{job="leave-management", service="identity-service"}
+```
