@@ -1,0 +1,1005 @@
+
+================================================================================
+              LEAVE-SERVICE — COMPLETE INTERVIEW & VIVA PREPARATION GUIDE
+================================================================================
+
+================================================================================
+1. PROJECT STRUCTURE & OVERVIEW
+================================================================================
+
+leave-service/
+├── Dockerfile                              ← Multi-stage Docker build
+├── pom.xml                                 ← Maven build file
+└── src/main/
+    ├── resources/application.yml           ← Bootstrap config (minimal)
+    └── java/com/leavemanagement/leaveservice/
+        ├── LeaveServiceApplication.java    ← Spring Boot entry point
+        ├── config/
+        │   ├── RabbitMQConfig.java          ← Message queue setup
+        │   └── SwaggerConfig.java           ← API docs + JWT auth
+        ├── entity/
+        │   ├── LeaveRequest.java            ← DB table: leave applications
+        │   ├── LeaveBalance.java            ← DB table: leave quotas
+        │   └── Holiday.java                 ← DB table: company holidays
+        ├── dto/
+        │   ├── LeaveRequestDto.java         ← API payload for leave requests
+        │   ├── LeaveBalanceDto.java          ← API payload for balances
+        │   └── HolidayDto.java              ← API payload for holidays
+        ├── repository/
+        │   ├── LeaveRequestRepository.java  ← DB queries for leave requests
+        │   ├── LeaveBalanceRepository.java   ← DB queries for balances
+        │   └── HolidayRepository.java       ← DB queries for holidays
+        ├── service/
+        │   ├── LeaveService.java            ← Interface (contract)
+        │   └── LeaveServiceImpl.java        ← Business logic implementation
+        ├── controller/
+        │   ├── LeaveController.java         ← REST endpoints for leaves
+        │   └── HolidayController.java       ← REST endpoints for holidays
+        ├── exception/
+        │   ├── BadRequestException.java     ← 400 error
+        │   ├── ResourceNotFoundException.java ← 404 error
+        │   └── GlobalExceptionHandler.java  ← Centralized error handling
+        └── listener/
+            └── LeaveApprovalListener.java   ← RabbitMQ consumer
+
+This service follows LAYERED ARCHITECTURE:
+  Controller → Service → Repository → Database
+  Each layer has a single responsibility and talks only to the layer below it.
+
+
+================================================================================
+2. pom.xml — BUILD FILE (MAVEN)
+================================================================================
+
+Maven's project descriptor. Declares dependencies, plugins, and build config.
+
+PARENT:
+  spring-boot-starter-parent (3.2.4)
+  → Inherits default configs: plugin versions, encoding, Java version defaults.
+  → Without it, you'd configure everything manually.
+
+PROJECT IDENTITY:
+  groupId = com.leavemanagement  (your organization)
+  artifactId = leave-service     (this specific service)
+  version = 0.0.1-SNAPSHOT       (development version, not a stable release)
+
+PROPERTIES:
+  java.version = 17
+  spring-cloud.version = 2023.0.1
+  sonar.host.url = http://localhost:9000 (for SonarQube code quality)
+  sonar.coverage.jacoco.xmlReportPaths = target/site/jacoco/jacoco.xml
+
+DEPENDENCIES (10 total):
+┌──────────────────────────────────────────┬──────────────────────────────────────────────────┐
+│ Dependency                               │ Why                                              │
+├──────────────────────────────────────────┼──────────────────────────────────────────────────┤
+│ spring-boot-starter-web                  │ REST API: embedded Tomcat, @RestController, JSON │
+│ spring-boot-starter-data-jpa             │ ORM: @Entity, JpaRepository, Hibernate           │
+│ mysql-connector-j (runtime)              │ JDBC driver to connect Java → MySQL              │
+│ eureka-client                            │ Register with Eureka for service discovery        │
+│ spring-cloud-starter-config              │ Fetch config from Config Server at startup        │
+│ spring-cloud-starter-openfeign           │ Declarative HTTP client for inter-service calls   │
+│ spring-boot-starter-validation           │ Bean validation: @NotBlank, @NotNull              │
+│ spring-boot-starter-amqp                 │ RabbitMQ support for async messaging              │
+│ spring-boot-starter-test (test)          │ JUnit 5 + Mockito for unit testing               │
+│ springdoc-openapi-starter-webmvc-ui      │ Swagger UI auto-generation at /swagger-ui.html   │
+└──────────────────────────────────────────┴──────────────────────────────────────────────────┘
+
+DEPENDENCY MANAGEMENT:
+  Imports Spring Cloud BOM (Bill of Materials) to ensure version compatibility
+  across all Cloud libraries (Eureka, Config, Feign).
+
+BUILD PLUGINS:
+  1. JaCoCo (jacoco-maven-plugin 0.8.14)
+     - prepare-agent: instruments bytecode before tests
+     - report: generates coverage XML after tests
+  2. Spring Boot Maven Plugin
+     - Creates executable fat JAR
+     - Excludes Lombok from final build (compile-time only)
+
+INTERVIEW Q: "Why use a parent POM?"
+→ "Spring Boot Starter Parent provides sensible defaults — encoding, plugin 
+   versions, dependency management. Reduces boilerplate significantly."
+
+INTERVIEW Q: "Difference between dependencies and dependencyManagement?"
+→ "dependencies actually adds the JARs. dependencyManagement only declares 
+   versions — the actual dependency still needs to be listed. We use it for 
+   the Spring Cloud BOM to align all Cloud library versions."
+
+
+================================================================================
+3. application.yml — CONFIGURATION
+================================================================================
+
+spring:
+  application:
+    name: leave-service
+  config:
+    import: optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}
+
+ONLY 6 LINES. Why so minimal?
+
+  1. spring.application.name = leave-service
+     → Identity used by Eureka (service discovery) and Config Server (config lookup)
+     → Config Server looks for a file called "leave-service.yml" in its Git repo
+
+  2. spring.config.import = optional:configserver:...
+     → Tells Spring: "Fetch real config from Config Server before starting"
+     → ${CONFIG_SERVER_URL:http://localhost:8888} = env variable with fallback
+     → In Docker: CONFIG_SERVER_URL=http://config-server:8888
+     → Locally: falls back to localhost:8888
+     → "optional:" = don't crash if Config Server is unreachable
+
+All heavy config (DB URL, credentials, Eureka URL, RabbitMQ, port) lives in
+the Config Server's Git repo. This is EXTERNALIZED CONFIGURATION pattern.
+
+INTERVIEW Q: "Why not put everything in application.yml?"
+→ "Externalized config via Config Server means we can change DB passwords, ports,
+   or feature flags WITHOUT rebuilding and redeploying the JAR."
+
+INTERVIEW Q: "What does 'optional:' do?"
+→ "Graceful degradation. If Config Server is down, the service still starts 
+   using local defaults instead of crashing."
+
+
+================================================================================
+4. LeaveServiceApplication.java — ENTRY POINT
+================================================================================
+
+@SpringBootApplication    // = @Configuration + @EnableAutoConfiguration + @ComponentScan
+@EnableDiscoveryClient    // Registers with Eureka
+@EnableFeignClients       // Activates Feign client support
+public class LeaveServiceApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(LeaveServiceApplication.class, args);
+    }
+}
+
+ANNOTATION BREAKDOWN:
+
+@SpringBootApplication (3-in-1 composite):
+  @Configuration        → This class can define @Bean methods
+  @EnableAutoConfiguration → Spring auto-configures based on classpath:
+     - Found mysql-connector? → configure DataSource
+     - Found starter-web? → start Tomcat
+     - Found starter-amqp? → configure RabbitMQ connection
+  @ComponentScan        → Scans all sub-packages for @Component, @Service,
+                          @Repository, @Controller, @Configuration beans
+
+@EnableDiscoveryClient:
+  → Registers with Eureka Server at startup
+  → API Gateway discovers this service by name, not hardcoded IP
+
+@EnableFeignClients:
+  → Enables declarative REST clients (used more in admin-service)
+  → Zero overhead if no @FeignClient interfaces exist
+
+SpringApplication.run():
+  1. Creates Spring ApplicationContext (IoC container)
+  2. Component scanning → finds all beans
+  3. Auto-configuration kicks in
+  4. Starts embedded Tomcat on port 8083
+  5. Registers with Eureka
+  6. Connects to MySQL, RabbitMQ
+
+INTERVIEW Q: "What happens when you call SpringApplication.run()?"
+→ "Creates the IoC container, scans components, runs auto-configuration, 
+   starts embedded Tomcat, and registers with Eureka."
+
+INTERVIEW Q: "What is IoC (Inversion of Control)?"
+→ "Instead of YOU creating objects with 'new', the Spring Container creates 
+   and manages them. You just declare what you need (@Autowired) and Spring 
+   injects it. This is Dependency Injection."
+
+
+================================================================================
+5. ENTITY LAYER — DATABASE TABLES
+================================================================================
+
+--- 5a. LeaveRequest.java ---
+
+@Entity → Maps to "leave_request" table in MySQL. Each instance = one row.
+
+FIELDS:
+┌──────────────────┬───────────────────┬───────────────────────────────────────┐
+│ Field            │ Type              │ Purpose                               │
+├──────────────────┼───────────────────┼───────────────────────────────────────┤
+│ id               │ Long              │ Primary key, auto-incremented (IDENTITY) │
+│ employeeCode     │ String (NOT NULL) │ Links to identity-service user        │
+│ leaveType        │ String (NOT NULL) │ SICK, CASUAL, EARNED                  │
+│ startDate        │ LocalDate (NOT NULL) │ Leave start date                   │
+│ endDate          │ LocalDate (NOT NULL) │ Leave end date                     │
+│ reason           │ String            │ Optional justification                │
+│ status           │ String (NOT NULL) │ SUBMITTED → APPROVED/REJECTED/CANCELLED │
+│ managerComments  │ String            │ Filled during approval/rejection      │
+│ createdOn        │ LocalDateTime     │ Audit: when created (updatable=false) │
+│ updatedOn        │ LocalDateTime     │ Audit: when last modified             │
+└──────────────────┴───────────────────┴───────────────────────────────────────┘
+
+KEY ANNOTATIONS:
+  @Entity             → JPA: "create a table for this class"
+  @Id                 → Primary key
+  @GeneratedValue(IDENTITY) → MySQL AUTO_INCREMENT
+  @Column(nullable=false)   → DB-level NOT NULL constraint
+  @Column(updatable=false)  → On createdOn: Hibernate never includes it in UPDATEs
+  @PrePersist         → Lifecycle hook: runs BEFORE first INSERT → auto-sets both timestamps
+  @PreUpdate          → Lifecycle hook: runs BEFORE every UPDATE → refreshes updatedOn
+
+STATUS STATE MACHINE:
+  SUBMITTED → APPROVED (manager approves)
+  SUBMITTED → REJECTED (manager rejects, must give reason)
+  SUBMITTED → CANCELLED (employee cancels)
+
+WHY NO FOREIGN KEY TO EMPLOYEE TABLE?
+→ In microservices, each service has its OWN database.
+→ Leave-service can't have a FK to identity-service's DB.
+→ We use employeeCode as a cross-service reference.
+→ This is the "DATABASE-PER-SERVICE" pattern.
+
+
+--- 5b. LeaveBalance.java ---
+
+Tracks leave quotas per employee per type.
+
+FIELDS: id, employeeCode, leaveType, allocated (total given), consumed (used)
+
+CALCULATED METHOD:
+  public Double getAvailableBalance() {
+      return allocated - consumed;
+  }
+→ NOT stored in DB. Computed on the fly.
+→ Why? Single source of truth. If stored, updating 3 fields is error-prone.
+
+WHY Double NOT int?
+→ Supports half-day leaves (0.5 days).
+
+EXAMPLE DATA:
+  EMP001 | SICK   | allocated=10 | consumed=2  → available=8
+  EMP001 | CASUAL | allocated=8  | consumed=3  → available=5
+  EMP001 | EARNED | allocated=15 | consumed=0  → available=15
+
+
+--- 5c. Holiday.java ---
+
+Master data for company holidays. Fields: id, date, description.
+@Column(unique=true) on date → no duplicate holiday entries in DB.
+
+
+================================================================================
+6. DTO LAYER — API TRANSFER OBJECTS
+================================================================================
+
+WHY DTOs? (Data Transfer Objects)
+DTOs DECOUPLE the API contract from the database schema.
+
+PROBLEMS WITHOUT DTOs:
+  1. Internal fields (id, createdOn) leak to the client
+  2. DB schema change = API contract breaks for every consumer
+  3. JPA annotations mixed with validation annotations = messy
+  4. Client could send "id" in request body and manipulate it
+
+--- 6a. LeaveRequestDto.java ---
+
+VALIDATION ANNOTATIONS:
+  @NotBlank("Leave type is required")  → not null, not empty, not whitespace
+  @NotNull("Start date is required")   → not null (can't use @NotBlank for dates)
+
+Triggered by @Valid in controller. If fails → MethodArgumentNotValidException
+→ caught by GlobalExceptionHandler → returns {"field": "error message"} JSON.
+
+--- 6b. LeaveBalanceDto.java ---
+Read-only response. Exposes: leaveType, allocated, consumed, availableBalance.
+No employeeCode (client already knows), no id (internal detail).
+
+--- 6c. HolidayDto.java ---
+Simple: date + description. No validation (admin-managed CRUD).
+
+INTERVIEW Q: "@NotNull vs @NotBlank vs @NotEmpty?"
+→ @NotNull = not null
+→ @NotEmpty = not null AND not empty string
+→ @NotBlank = not null, not empty, AND not just whitespace (strictest for strings)
+
+
+================================================================================
+7. REPOSITORY LAYER — DATABASE ACCESS
+================================================================================
+
+All extend JpaRepository<Entity, IdType> → get free CRUD:
+  save(), findById(), findAll(), deleteById(), count(), existsById()
+
+--- 7a. LeaveRequestRepository.java ---
+
+METHOD 1 — DERIVED QUERY (Spring generates SQL from method name):
+  List<LeaveRequest> findByEmployeeCode(String employeeCode);
+  → SELECT * FROM leave_request WHERE employee_code = ?
+
+METHOD 2 — CUSTOM JPQL (complex query):
+  @Query("SELECT lr FROM LeaveRequest lr WHERE lr.employeeCode = :employeeCode
+         AND lr.status IN ('SUBMITTED', 'APPROVED')
+         AND ((lr.startDate BETWEEN :startDate AND :endDate)
+         OR (lr.endDate BETWEEN :startDate AND :endDate))")
+  List<LeaveRequest> findOverlappingRequests(...)
+
+  → Prevents double-booking. Finds existing leaves overlapping with new dates.
+  → @Param("employeeCode") binds method param to JPQL placeholder.
+
+JPQL vs SQL:
+  JPQL uses entity/class names (LeaveRequest) and field names (lr.employeeCode)
+  SQL uses table/column names (leave_request, employee_code)
+  Hibernate translates JPQL → actual SQL dialect
+
+--- 7b. LeaveBalanceRepository.java ---
+  findByEmployeeCode(String) → all balances for an employee
+  findByEmployeeCodeAndLeaveType(String, String) → specific balance, returns Optional
+
+WHY Optional?
+  → Forces caller to handle "not found" with .orElseThrow()
+  → Prevents NullPointerException. Java 8+ best practice.
+
+--- 7c. HolidayRepository.java ---
+  findByDateBetween(LocalDate, LocalDate) → holidays in a date range
+
+INTERVIEW Q: "Why interfaces for repositories?"
+→ "Spring Data JPA uses the Proxy Pattern. At runtime, Spring scans these 
+   interfaces, generates implementation classes via reflection, and registers 
+   them as beans. We declare WHAT we want, Spring figures out HOW."
+
+
+================================================================================
+8. SERVICE LAYER — BUSINESS LOGIC (THE BRAIN)
+================================================================================
+
+--- 8a. LeaveService.java (Interface) ---
+
+public interface LeaveService {
+    List<LeaveBalanceDto> getLeaveBalances(String employeeCode);
+    LeaveRequestDto applyForLeave(String employeeCode, LeaveRequestDto dto);
+    List<LeaveRequestDto> getLeaveHistory(String employeeCode);
+    List<LeaveRequestDto> getTeamCalendar(LocalDate start, LocalDate end);
+    List<LeaveRequestDto> getPendingApprovals();
+    LeaveRequestDto updateLeaveStatus(Long id, String status, String comments);
+}
+
+WHY INTERFACE?
+  → Dependency Inversion Principle (SOLID 'D')
+  → Controller depends on CONTRACT, not implementation
+  → Makes testing easy: @Mock LeaveService leaveService
+  → Can swap implementations without touching controllers
+
+
+--- 8b. LeaveServiceImpl.java (Implementation) ---
+
+@Service → Registers as Spring bean in service layer
+@Autowired → Field injection of repositories
+
+METHOD 1: getLeaveBalances(employeeCode)
+  → Fetch all balances → stream → map entity→DTO → return list
+  → stream().map(this::mapToBalanceDto).collect(Collectors.toList())
+  → this::mapToBalanceDto is a METHOD REFERENCE (shorthand for lambda)
+
+METHOD 2: applyForLeave(employeeCode, dto) — MOST COMPLEX ★
+  @Transactional
+  Step 1: Validate dates (start must be before end)
+  Step 2: Check overlaps (JPQL query for conflicting leaves)
+  Step 3: Calculate days: ChronoUnit.DAYS.between(start, end) + 1
+          (+1 because both days are inclusive: March 25→27 = 3 days)
+  Step 4: Check balance (find by employee+type, verify sufficient days)
+  Step 5: Create LeaveRequest, set status "SUBMITTED", save to DB
+  
+  ★ BALANCE IS NOT DEDUCTED HERE — only checked!
+  ★ Deduction happens in updateLeaveStatus() on APPROVAL.
+  ★ Why? You don't want to lose balance for a request that gets rejected.
+
+METHOD 3: getLeaveHistory(employeeCode)
+  → Simple fetch + map to DTOs
+
+METHOD 4: getTeamCalendar(start, end)
+  → findAll() → filter in Java for APPROVED leaves overlapping the window
+  → Date overlap logic:
+    !startDate.isAfter(endWindow) AND !endDate.isBefore(startWindow)
+
+METHOD 5: getPendingApprovals()
+  → findAll() → filter for status == "SUBMITTED"
+  → Null-safety: "SUBMITTED".equals(status) instead of status.equals("SUBMITTED")
+    If status is null, first version returns false, second throws NPE.
+
+METHOD 6: updateLeaveStatus(id, status, comments) — SECOND MOST IMPORTANT ★
+  @Transactional
+  Step 1: Find request by ID → 404 if not found
+  Step 2: Guard: only SUBMITTED can be processed (prevents double-processing)
+  Step 3: If REJECTED → comments are mandatory (business rule)
+  Step 4: If APPROVED → deduct balance (consumed += daysApplied)
+  Step 5: Update status + comments, save
+  
+  ★ TWO CALLERS: REST API (sync) + RabbitMQ listener (async)
+  ★ Same business logic, two entry points = CODE REUSE
+
+  @Transactional is CRITICAL: does TWO writes (balance + request).
+  If second save fails, balance deduction rolls back. ATOMICITY.
+
+MAPPER METHODS (private):
+  mapToBalanceDto(LeaveBalance) → LeaveBalanceDto
+  mapToRequestDto(LeaveRequest) → LeaveRequestDto
+  Manual mapping. Alternatives: MapStruct (compile-time) or ModelMapper (reflection).
+
+INTERVIEW Q: "Walk through what happens when an employee applies for leave."
+→ "Validate dates, check DB for overlapping leaves, calculate days, verify 
+   sufficient balance, create request with SUBMITTED status. Balance NOT 
+   deducted yet — only on manager approval."
+
+INTERVIEW Q: "Why @Transactional?"
+→ "Ensures atomicity. In applyForLeave, if balance check passes but save 
+   fails, nothing is committed. In updateLeaveStatus, if balance deduction 
+   succeeds but status update fails, balance rolls back."
+
+INTERVIEW Q: "What is @Transactional propagation?"
+→ "Default is REQUIRED — use existing transaction or create new one. Other 
+   options: REQUIRES_NEW (always new), NESTED, SUPPORTS, etc."
+
+
+================================================================================
+9. CONTROLLER LAYER — REST API
+================================================================================
+
+--- 9a. LeaveController.java ---
+
+@RestController         → @Controller + @ResponseBody (returns JSON)
+@RequestMapping("/api/leave")  → All endpoints start with /api/leave
+@Tag(name="Leave Management")  → Swagger grouping
+
+ENDPOINTS:
+┌─────────────────────────────────┬────────┬───────────────────────────────────────┐
+│ Endpoint                        │ Method │ Purpose                               │
+├─────────────────────────────────┼────────┼───────────────────────────────────────┤
+│ /api/leave/balance/{userId}     │ GET    │ Get all leave balances for employee   │
+│ /api/leave/requests             │ POST   │ Apply for leave                       │
+│ /api/leave/history              │ GET    │ Get employee's leave history          │
+│ /api/leave/team-calendar        │ GET    │ View team approved leaves (date range)│
+│ /api/leave/pending-approvals    │ GET    │ Manager: pending requests             │
+│ /api/leave/{id}/status          │ PUT    │ Approve/reject a request              │
+└─────────────────────────────────┴────────┴───────────────────────────────────────┘
+
+KEY ANNOTATIONS:
+  @PathVariable  → from URL: /balance/{userId} → userId = "EMP001"
+  @RequestParam  → from query: ?status=APPROVED&comments=Ok
+  @RequestHeader("X-Employee-Code") → from HTTP header (set by API Gateway after JWT)
+  @Valid @RequestBody    → deserialize JSON + trigger bean validation
+  @DateTimeFormat(iso=ISO.DATE) → parse "2026-03-28" string → LocalDate
+  ResponseEntity.ok(...) → HTTP 200 with body
+
+IMPORTANT:
+  X-Employee-Code header comes from API Gateway, NOT from the user.
+  Gateway validates JWT → extracts employeeCode → forwards as header.
+  Leave-service DOESN'T DO AUTH — it trusts the gateway.
+  This makes leave-service STATELESS and AUTH-AGNOSTIC.
+
+
+--- 9b. HolidayController.java ---
+
+Two simple endpoints:
+  GET  /api/holidays  → list all (findAll → map → DTOs)
+  POST /api/holidays  → add new holiday
+
+DIRECTLY USES REPOSITORY (no service layer).
+→ Acceptable for simple CRUD master data.
+
+
+================================================================================
+10. CONFIG LAYER
+================================================================================
+
+--- 10a. RabbitMQConfig.java ---
+
+@Configuration
+public class RabbitMQConfig {
+    public static final String LEAVE_QUEUE = "leave-approval-queue";
+
+    @Bean Queue leaveQueue() → declares queue in RabbitMQ (idempotent)
+    @Bean MessageConverter messageConverter() → Jackson2JsonMessageConverter
+}
+
+→ Queue bean ensures queue EXISTS when service starts
+→ Jackson2JsonMessageConverter → JSON format (not default Java serialization)
+  Without this, messages from admin-service wouldn't be readable.
+
+INTERVIEW Q: "What if both services declare the same queue?"
+→ "RabbitMQ is idempotent — declaring an existing queue with same config is safe.
+   Both services declare it to ensure it exists regardless of which starts first."
+
+
+--- 10b. SwaggerConfig.java ---
+
+Configures Swagger UI with global JWT "Authorize" button.
+Without this, you'd manually add "Authorization: Bearer <token>" to every request.
+
+
+================================================================================
+11. EXCEPTION LAYER
+================================================================================
+
+--- BadRequestException.java ---
+  @ResponseStatus(HttpStatus.BAD_REQUEST)  → 400
+  extends RuntimeException
+  Thrown for: invalid dates, overlaps, insufficient balance, missing comments
+
+--- ResourceNotFoundException.java ---
+  @ResponseStatus(HttpStatus.NOT_FOUND)  → 404
+  extends RuntimeException
+  Thrown for: leave request ID not found, balance record not found
+
+--- GlobalExceptionHandler.java ---
+  @ControllerAdvice → intercepts exceptions from ALL controllers (cross-cutting)
+
+  4 handlers (most specific → least specific):
+  ┌──────────────────────────────────┬──────┬────────────────────────────────────┐
+  │ Exception                        │ HTTP │ When                               │
+  ├──────────────────────────────────┼──────┼────────────────────────────────────┤
+  │ ResourceNotFoundException        │ 404  │ DB lookup returns empty            │
+  │ BadRequestException              │ 400  │ Validation / business rule failure │
+  │ MethodArgumentNotValidException  │ 400  │ @Valid fails on DTO fields         │
+  │ Exception (catch-all)            │ 500  │ Anything unexpected (DB down, NPE) │
+  └──────────────────────────────────┴──────┴────────────────────────────────────┘
+
+  MethodArgumentNotValidException handler returns FIELD-LEVEL errors:
+    {"leaveType": "Leave type is required", "startDate": "Start date is required"}
+
+INTERVIEW Q: "What is @ControllerAdvice?"
+→ "Cross-cutting concern — applies error handling to ALL controllers without 
+   modifying them. Follows Single Responsibility Principle. Without it, Spring 
+   returns ugly HTML error pages."
+
+
+================================================================================
+12. LISTENER LAYER — ASYNC PROCESSING (RabbitMQ)
+================================================================================
+
+LeaveApprovalListener.java:
+  @Component
+  @RabbitListener(queues = "leave-approval-queue")
+  public void handleLeaveApproval(Map<String, Object> payload) {
+      Long id = Long.valueOf(payload.get("id").toString());
+      String status = (String) payload.get("status");
+      String comments = (String) payload.get("comments");
+      leaveService.updateLeaveStatus(id, status, comments);
+  }
+
+THE ASYNC FLOW:
+  1. Manager clicks "Approve Leave #5" in UI
+  2. Admin-service receives the request
+  3. Admin-service PUBLISHES to RabbitMQ:
+     {"id": 5, "status": "APPROVED", "comments": "Enjoy your vacation"}
+  4. Message sits in "leave-approval-queue"
+  5. LeaveApprovalListener PICKS IT UP automatically
+  6. Calls leaveService.updateLeaveStatus(5, "APPROVED", "Enjoy")
+  7. Balance deducted, status updated in DB
+
+WHY Map<String, Object> instead of typed class?
+  → Simple interoperability. No shared dependency between services.
+  → Alternative: shared event class, but that creates coupling.
+
+TRY-CATCH:
+  If processing fails, we catch and log. Without this, RabbitMQ would 
+  RE-QUEUE the message infinitely → infinite error loop.
+
+WHY ASYNC?
+  1. DECOUPLING — admin doesn't need to know leave-service's URL
+  2. RELIABILITY — if leave-service is down, messages wait in queue
+  3. SPEED — admin-service doesn't wait for leave-service to respond
+
+INTERVIEW Q: "What is the pub/sub pattern?"
+→ "Admin-service is the PRODUCER (publishes events). Leave-service is the 
+   CONSUMER (listens for events). RabbitMQ is the BROKER that routes messages. 
+   This is event-driven architecture — services communicate through events, 
+   not direct calls."
+
+
+================================================================================
+13. DOCKERFILE — CONTAINERIZATION
+================================================================================
+
+FROM maven:3.9.9-eclipse-temurin-17 AS build   ← Stage 1: Build
+WORKDIR /app
+COPY pom.xml .
+COPY src ./src
+RUN mvn -DskipTests package
+
+FROM eclipse-temurin:17-jre                      ← Stage 2: Run
+WORKDIR /app
+COPY --from=build /app/target/leave-service-0.0.1-SNAPSHOT.jar app.jar
+EXPOSE 8083
+ENTRYPOINT ["java", "-jar", "/app/app.jar"]
+
+MULTI-STAGE BUILD:
+  Stage 1: Full Maven+JDK (~500MB) to compile
+  Stage 2: Slim JRE-only (~200MB) to run
+  → Final image is SMALL & SECURE — no compiler, no source code
+  → Reduces Docker image size by ~60%
+
+INTERVIEW Q: "Why multi-stage?"
+→ "Smaller, more secure production images. Build tools and source code are 
+   discarded in the final image."
+
+
+================================================================================
+14. OPENFEIGN — INTER-SERVICE COMMUNICATION
+================================================================================
+
+WHERE: admin-service/client/ folder
+
+LeaveClient.java:
+  @FeignClient(name = "leave-service", path = "/api/leave")
+  public interface LeaveClient {
+      @GetMapping("/pending-approvals")
+      ResponseEntity<List<Map<String, Object>>> getPendingLeaveRequests();
+
+      @PutMapping("/{id}/status")
+      ResponseEntity<Map<String, Object>> updateLeaveStatus(
+          @PathVariable("id") Long id, ...);
+  }
+
+HOW IT WORKS:
+  1. @FeignClient(name="leave-service") → Feign asks EUREKA: "Where is leave-service?"
+  2. Eureka returns: http://192.168.x.x:8083
+  3. You write the interface like a controller
+  4. Spring creates implementation at runtime — NO RestTemplate code ever
+
+DESIGN PATTERN IN ADMIN-SERVICE:
+  READs → Feign (synchronous + CircuitBreaker fallback)
+  WRITEs → RabbitMQ (asynchronous, fire-and-forget)
+
+  @CircuitBreaker(name="leaveService", fallbackMethod="fallbackGetPendingLeaves")
+  public List<...> getPendingLeaves() {
+      return leaveClient.getPendingLeaveRequests().getBody();
+  }
+  // If leave-service is DOWN → returns friendly error message instead of crashing
+
+INTERVIEW Q: "Why Feign instead of RestTemplate?"
+→ "Feign is declarative — write an interface, not HTTP boilerplate. It 
+   integrates with Eureka (service discovery) and Resilience4j (circuit breaking). 
+   RestTemplate requires manual URL construction and error handling."
+
+INTERVIEW Q: "What is a Circuit Breaker?"
+→ "Like an electrical circuit breaker. If leave-service fails repeatedly, 
+   the circuit OPENS and immediately returns the fallback response without 
+   even trying to call the service. This prevents cascade failures.
+   States: CLOSED (normal) → OPEN (failing) → HALF_OPEN (testing recovery)."
+
+
+================================================================================
+15. JWT, SECURITY, SIGNUP & LOGIN
+================================================================================
+
+THE COMPLETE AUTH FLOW (3 services):
+
+  IDENTITY-SERVICE           API-GATEWAY              LEAVE-SERVICE
+  ────────────────           ───────────              ──────────────
+  1. Signup/Login (open)
+  2. Generate JWT token
+                             3. Validate JWT
+                             4. Extract employeeCode
+                             5. Forward as X-Employee-Code header
+                                                      6. Trust header
+
+IDENTITY-SERVICE:
+
+  User Entity (users table):
+    employeeCode (unique), name, email (unique), password (BCrypt hash),
+    active (boolean), roles (Set: ROLE_EMPLOYEE, ROLE_MANAGER, ROLE_ADMIN)
+    → Roles stored in separate "user_roles" table via @ElementCollection
+
+  AuthController:
+    POST /api/auth/signup → registerUser()
+    POST /api/auth/login  → authenticateUser() → returns JWT
+
+  AuthServiceImpl — SIGNUP:
+    1. Check email not already taken
+    2. Check employeeCode not already taken
+    3. Hash password: passwordEncoder.encode(password)  ← BCrypt, one-way hash
+    4. Set default role: ROLE_EMPLOYEE
+    5. Save to DB
+
+  AuthServiceImpl — LOGIN:
+    1. Find user by email OR employeeCode (flexible login)
+    2. Verify password: passwordEncoder.matches(plaintext, hash)
+    3. Check account is active
+    4. Generate JWT: tokenProvider.generateToken(employeeCode, roles)
+    5. Return: { token, employeeCode, name, roles }
+
+  JwtTokenProvider — TOKEN CREATION:
+    Jwts.builder()
+        .setSubject(employeeCode)           ← WHO this token belongs to
+        .addClaims(Map.of("roles", roles))  ← WHAT they can do
+        .setIssuedAt(new Date())            ← WHEN created
+        .setExpiration(expiryDate)           ← WHEN expires (24h)
+        .signWith(key, HS256)               ← SIGNED with secret key
+        .compact();
+
+    JWT structure: Header.Payload.Signature (Base64 encoded)
+
+  SecurityConfig:
+    - BCryptPasswordEncoder bean (for hashing)
+    - SecurityFilterChain: 
+      /api/auth/**, /swagger-ui/**, /v3/api-docs/** → permitAll()
+      Everything else → authenticated
+    - CSRF disabled (stateless REST API, not browser sessions)
+
+API-GATEWAY:
+
+  RouteValidator.java:
+    Open endpoints: /api/auth/signup, /api/auth/login, /swagger-ui, /eureka
+    isSecured = request → path does NOT match any open endpoint
+
+  JwtUtil.java:
+    Same secret key as identity-service! (app.jwt-secret property)
+    getClaims(token) → parses and returns claims
+    isInvalid(token) → tries parsing, returns true if any exception
+
+  JwtAuthenticationFilter.java — THE GATEKEEPER:
+    1. Is this a secured route? (RouteValidator checks)
+    2. Has Authorization header? → 401 if missing
+    3. Extract token: "Bearer eyJhbG..." → "eyJhbG..."
+    4. Validate token (same secret key) → 401 if invalid
+    5. Extract employeeCode from token subject
+    6. ADD X-Employee-Code header and forward to downstream service
+    
+    → extends AbstractGatewayFilterFactory (Spring Cloud Gateway filter)
+    → Uses REACTIVE types (Mono, ServerWebExchange) because Gateway is WebFlux-based
+
+INTERVIEW Q: "How does leave-service know which user is making the request?"
+→ "API Gateway validates JWT, extracts employeeCode from token subject, 
+   forwards it as X-Employee-Code header. Leave-service reads this header."
+
+INTERVIEW Q: "Why is the same JWT secret in both identity-service and gateway?"
+→ "Identity-service SIGNS tokens with the key, Gateway VALIDATES tokens with 
+   the same key. HMAC-SHA256 is symmetric — same key for signing and verifying."
+
+INTERVIEW Q: "Why BCrypt?"
+→ "One-way hash with built-in salt. Even if DB is compromised, passwords can't 
+   be reversed. Each hash is unique due to random salt."
+
+
+================================================================================
+16. DOCKER-COMPOSE — ORCHESTRATION
+================================================================================
+
+10 containers, one command: docker-compose up --build
+
+BOOT ORDER (managed by depends_on):
+  Layer 1 (infra):     Loki, RabbitMQ
+  Layer 2 (platform):  Config Server, Grafana, Promtail
+  Layer 3 (discovery): Eureka Server
+  Layer 4 (services):  identity, leave, timesheet, admin (sleep 55s)
+  Layer 5 (gateway):   API Gateway (sleep 70s — needs ALL services)
+
+KEY PATTERNS:
+  1. entrypoint: ["sh", "-c", "sleep 55 && java -jar /app/app.jar"]
+     → Wait for Config Server & Eureka to be ready
+  
+  2. extra_hosts: ["host.docker.internal:host-gateway"]
+     → MySQL runs on host machine, not in Docker
+     → Containers access host's localhost via host.docker.internal
+  
+  3. Separate databases per service:
+     identity-service  → auth_db
+     leave-service     → leave_db
+     timesheet-service → timesheet_db
+     admin-service     → admin_db
+     → DATABASE-PER-SERVICE microservices pattern
+  
+  4. healthcheck on RabbitMQ:
+     test: rabbitmq-diagnostics -q ping
+     → Services with condition: service_healthy won't start until MQ is ready
+  
+  5. Log volumes:
+     ./observability/logs/<service>:/logs
+     → Services write to /logs/app.log → mapped to host for Promtail to read
+
+  6. Environment variables with defaults:
+     ${MYSQL_PASSWORD:-Mahadev12@a}
+     → Use env var if set, otherwise use default
+
+INTERVIEW Q: "Why sleep before starting services?"
+→ "Config Server and Eureka need time to start. Without the delay, services 
+   would fail to fetch config or register. A more production-ready approach 
+   is using health check retry logic."
+
+
+================================================================================
+17. GRAFANA + LOKI + PROMTAIL — OBSERVABILITY
+================================================================================
+
+THE STACK:
+  Services → write log files → /observability/logs/<service>/app.log
+                                       ↓
+                                  PROMTAIL (log shipper)
+                                  reads files, adds labels
+                                       ↓
+                                  LOKI (log database)
+                                  stores & indexes logs
+                                       ↓
+                                  GRAFANA (UI at port 3000)
+                                  query & visualize logs
+
+PROMTAIL (promtail-config.yml):
+  - Reads all service logs: /var/log/leave-management/*/*.log
+  - Extracts service name from folder path using regex
+  - Adds "service" label (e.g., service=leave-service)
+  - Pushes to Loki: http://loki:3100/loki/api/v1/push
+
+LOKI (loki-config.yml):
+  - Stores logs on filesystem (/loki/chunks)
+  - TSDB index for fast queries
+  - Runs on port 3100
+
+GRAFANA (datasource.yml):
+  - Auto-configured to connect to Loki
+  - Dashboard at localhost:3000 (admin/admin)
+  - Query examples:
+    {service="leave-service"}           → all leave-service logs
+    {service="leave-service"} |= "ERROR" → only errors
+
+INTERVIEW Q: "How do you monitor microservices?"
+→ "Grafana-Loki-Promtail stack. Services write logs to mounted volumes.
+   Promtail ships them with service labels to Loki. Grafana queries Loki."
+
+INTERVIEW Q: "Why Loki not ELK (Elasticsearch)?"
+→ "Loki only indexes labels, not full text. Lighter, faster setup, less 
+   resource-hungry. Perfect for this project scale."
+
+
+================================================================================
+18. JUNIT 5, MOCKITO & SONARQUBE — TESTING & QUALITY
+================================================================================
+
+TWO TESTING STYLES:
+
+STYLE 1 — Pure Unit Tests (Service, Listener, Exception):
+  @ExtendWith(MockitoExtension.class)  → No Spring, pure Mockito
+  @Mock → fake repository (returns null by default until stubbed)
+  @InjectMocks → real service class, injected with fake deps
+  Tests run in MILLISECONDS — no Tomcat, no DB.
+
+STYLE 2 — Slice Tests (Controller):
+  @WebMvcTest(LeaveController.class) → starts ONLY web layer
+  @Autowired MockMvc → simulates HTTP requests
+  @MockBean → Spring-managed mock (replaces real bean in context)
+
+KEY MOCKITO CONCEPTS:
+
+  1. STUBBING: when(repo.findById(1L)).thenReturn(Optional.of(request));
+     → "When mock is called with this input, return this output"
+
+  2. VERIFICATION: verify(service, times(1)).updateLeaveStatus(...)
+                   verify(service, never()).updateLeaveStatus(...)
+     → Assert method was called N times
+
+  3. ASSERTIONS: assertThrows(BadRequestException.class, () -> ...)
+                 assertEquals("expected", actual)
+     → JUnit 5 assertion methods
+
+  4. MATCHERS: eq("EMP001"), any(LocalDate.class)
+     → Rule: if you use a matcher for ONE arg, use for ALL args
+
+  5. @BeforeEach: setUp() → fresh test data before each test
+
+TEST FILES & WHAT THEY COVER:
+  LeaveServiceImplTest    → 9 tests: all business rules, happy + error paths
+  LeaveControllerTest     → 6 tests: HTTP endpoints via MockMvc
+  LeaveApprovalListenerTest → 2 tests: success + error handling
+  GlobalExceptionHandlerTest → 3 tests: 404, 400, 500 responses
+  ModelTest               → entity/DTO constructors and getters
+  ConfigTest              → config beans created correctly
+
+TEST application.yml:
+  spring.cloud.config.enabled: false  → don't reach Config Server
+  eureka.client.enabled: false        → don't register with Eureka
+
+SONARQUBE PIPELINE:
+  Step 1: mvn test → JUnit runs tests
+  Step 2: JaCoCo instruments code → generates target/site/jacoco/jacoco.xml
+  Step 3: mvn sonar:sonar -Dsonar.token=<token> → pushes to SonarQube
+  Step 4: SonarQube analyzes: coverage %, code smells, bugs, vulnerabilities
+
+SONARQUBE DOCKER:
+  docker-compose -f docker-compose-sonar.yml up -d
+  → SonarQube at localhost:9000
+
+INTERVIEW Q: "@Mock vs @MockBean?"
+→ "@Mock is pure Mockito (no Spring). @MockBean creates mock AND registers it 
+   in Spring ApplicationContext. Use @Mock in unit tests, @MockBean in slice tests."
+
+INTERVIEW Q: "Why mock instead of real DB?"
+→ "Unit tests must be fast, isolated, deterministic. Real DB = slow, flaky,
+   order-dependent. Mocking tests ONLY business logic in isolation."
+
+
+================================================================================
+19. DESIGN PATTERNS USED IN THE PROJECT
+================================================================================
+
+┌───────────────────────────────┬──────────────────────────┬────────────────────────────────────┐
+│ Pattern                       │ Where                    │ Why                                │
+├───────────────────────────────┼──────────────────────────┼────────────────────────────────────┤
+│ Layered Architecture          │ Controller→Service→Repo  │ Separation of concerns             │
+│ DTO Pattern                   │ DTOs separate from entities │ Decouple API from DB schema     │
+│ Repository Pattern            │ JpaRepository interfaces │ Abstract away SQL queries          │
+│ Dependency Inversion (SOLID)  │ LeaveService interface   │ Loose coupling, testability        │
+│ Event-Driven / Pub-Sub        │ RabbitMQ listener        │ Async, decoupled communication     │
+│ API Gateway Pattern           │ Spring Cloud Gateway     │ Single entry point, centralized auth│
+│ Service Discovery             │ Eureka client            │ Dynamic service location           │
+│ Externalized Configuration    │ Config Server            │ Change config without rebuild      │
+│ Circuit Breaker               │ Resilience4j             │ Fault tolerance                    │
+│ Database-per-Service          │ Separate DBs per service │ Service independence               │
+│ Global Exception Handling     │ @ControllerAdvice        │ Consistent error responses         │
+│ Proxy Pattern                 │ JpaRepository / Feign    │ Runtime implementation generation  │
+│ State Machine                 │ LeaveRequest.status      │ Controlled status transitions      │
+│ Multi-stage Docker Build      │ Dockerfile               │ Smaller, secure images             │
+│ Centralized Logging           │ Grafana/Loki/Promtail    │ Unified log aggregation            │
+└───────────────────────────────┴──────────────────────────┴────────────────────────────────────┘
+
+
+================================================================================
+20. COMMON INTERVIEW QUESTIONS — BONUS PREPARATION
+================================================================================
+
+Q: "Explain your microservices architecture."
+→ "7 services: Config Server (centralized config), Eureka Server (service discovery),
+   API Gateway (JWT validation + routing), Identity Service (auth + JWT generation),
+   Leave Service (leave management), Timesheet Service, Admin Service (centralized 
+   approvals via Feign + RabbitMQ). All containerized with Docker Compose. 
+   Monitored with Grafana-Loki-Promtail. Quality assured with JUnit + SonarQube."
+
+Q: "How do services communicate?"
+→ "Two ways: (1) Synchronous — OpenFeign for READs (admin calls leave-service 
+   to fetch pending leaves). Feign uses Eureka for service discovery. 
+   (2) Asynchronous — RabbitMQ for WRITEs (admin publishes approval events, 
+   leave-service consumes them). This provides reliability and decoupling."
+
+Q: "What happens if a service goes down?"
+→ "Circuit Breaker (Resilience4j) in admin-service returns fallback responses 
+   instead of failing. RabbitMQ queues hold messages until the consumer comes 
+   back. API Gateway returns fallback responses if downstream is unreachable."
+
+Q: "How do you handle distributed transactions?"
+→ "We follow eventual consistency. When admin approves a leave via RabbitMQ, 
+   the leave-service processes it asynchronously. The admin gets immediate 
+   acknowledgment that the event is QUEUED, and the actual update happens 
+   when the consumer processes the message."
+
+Q: "What's the difference between monolith and microservices?"
+→ "Monolith: single deployable unit. Microservices: each service independently 
+   deployable, scalable, has own DB. Trade-off: more complexity (networking, 
+   data consistency) but better scalability and team autonomy."
+
+Q: "How would you scale this system?"
+→ "Run multiple instances of high-traffic services (e.g., leave-service). 
+   Eureka handles registration of all instances. API Gateway + Eureka do 
+   client-side load balancing automatically. RabbitMQ distributes messages 
+   across consumer instances."
+
+Q: "Why Spring Boot?"
+→ "Convention over configuration. Auto-configures based on classpath. Embedded 
+   server (no external Tomcat). Massive ecosystem (Spring Cloud, Spring Data, 
+   Spring Security). Production-ready with actuator endpoints."
+
+Q: "What is Spring Cloud?"
+→ "A suite of tools for microservices: Config Server (externalized config), 
+   Eureka (service discovery), Gateway (API routing), OpenFeign (declarative 
+   REST clients), Resilience4j (circuit breakers)."
+
+Q: "What is Hibernate and JPA?"
+→ "JPA is the specification (interface). Hibernate is the implementation. 
+   JPA defines annotations like @Entity, @Id. Hibernate translates them to 
+   actual SQL queries. Spring Data JPA adds the repository abstraction on top."
+
+Q: "What are the SOLID principles and how did you use them?"
+→ "S — Single Responsibility: each layer has one job (controller=HTTP, service=logic)
+   O — Open/Closed: add new leave types without modifying existing code
+   L — Liskov: LeaveServiceImpl can replace LeaveService interface anywhere
+   I — Interface Segregation: small focused interfaces (LeaveService, repositories)
+   D — Dependency Inversion: controller depends on interface, not implementation"
+
+
+================================================================================
+END OF GUIDE — GOOD LUCK WITH YOUR VIVA! 🚀
+================================================================================

@@ -16,7 +16,7 @@ public class FallbackController {
         Map<String, Object> response = new HashMap<>();
         response.put("error", "Service Unavailable");
         response.put("message", "The requested microservice is currently offline or unreachable. Please try again later.");
-        
+
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(response);
     }
 }
