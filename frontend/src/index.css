@@ -1,0 +1,3 @@
+/* Override the old root-level Vite default styles */
+body { margin: 0; }
+#root { width: 100%; max-width: 100%; border: none; text-align: left; }
