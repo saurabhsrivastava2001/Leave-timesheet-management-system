@@ -1,5 +1,6 @@
 package com.leavemanagement.timesheetservice.controller;
 
+import com.leavemanagement.timesheetservice.dto.ProjectSummaryDto;
 import com.leavemanagement.timesheetservice.dto.TimesheetDto;
 
 // touch: refresh IDE index
@@ -32,13 +33,35 @@ public class TimesheetController {
         return ResponseEntity.ok(timesheetService.getTimesheet(employeeCode, weekStart));
     }
 
+    @GetMapping("/history")
+    @Operation(summary = "Get timesheet history for the logged-in employee")
+    public ResponseEntity<List<TimesheetDto>> getTimesheetHistory(
+            @RequestHeader("X-Employee-Code") String employeeCode) {
+        return ResponseEntity.ok(timesheetService.getTimesheetHistory(employeeCode));
+    }
+
+    @GetMapping("/projects")
+    @Operation(summary = "Get active projects available for timesheet logging")
+    public ResponseEntity<List<ProjectSummaryDto>> getActiveProjects() {
+        return ResponseEntity.ok(timesheetService.getActiveProjects());
+    }
+
     @PostMapping("/entries")
     @Operation(summary = "Save or update timesheet draft")
     public ResponseEntity<TimesheetDto> saveTimesheet(
             @RequestHeader("X-Employee-Code") String employeeCode,
             @Valid @RequestBody TimesheetDto timesheetDto) {
-        timesheetDto.setEmployeeCode(employeeCode);
-        return ResponseEntity.ok(timesheetService.saveOrUpdateTimesheet(timesheetDto));
+        return ResponseEntity.ok(timesheetService.saveOrUpdateTimesheet(employeeCode, timesheetDto));
+    }
+
+    @PutMapping("/weeks/{weekStart}")
+    @Operation(summary = "Save or replace a weekly timesheet draft")
+    public ResponseEntity<TimesheetDto> saveWeeklyTimesheet(
+            @RequestHeader("X-Employee-Code") String employeeCode,
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate weekStart,
+            @Valid @RequestBody TimesheetDto timesheetDto) {
+        timesheetDto.setWeekStartDate(weekStart);
+        return ResponseEntity.ok(timesheetService.saveOrUpdateTimesheet(employeeCode, timesheetDto));
     }
 
     @PostMapping("/weeks/{weekStart}/submit")

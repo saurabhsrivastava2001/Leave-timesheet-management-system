@@ -1,8 +1,10 @@
 package com.leavemanagement.adminservice.service;
 
+import com.leavemanagement.adminservice.client.IdentityClient;
 import com.leavemanagement.adminservice.client.LeaveClient;
 import com.leavemanagement.adminservice.client.TimesheetClient;
 import com.leavemanagement.adminservice.config.RabbitMQConfig;
+import com.leavemanagement.adminservice.exception.BadRequestException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -16,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -29,6 +32,9 @@ public class AdminApprovalServiceTest {
 
     @Mock
     private LeaveClient leaveClient;
+
+    @Mock
+    private IdentityClient identityClient;
 
     @Mock
     private RabbitTemplate rabbitTemplate;
@@ -78,15 +84,55 @@ public class AdminApprovalServiceTest {
 
     @Test
     void testApproveLeave() {
-        Map<String, Object> result = adminApprovalService.approveLeave(1L, "OK");
+        when(leaveClient.getPendingLeaveRequests()).thenReturn(ResponseEntity.ok(List.of(Map.of("id", 1L, "employeeCode", "EMP001"))));
+        when(identityClient.getUserSummary("EMP001")).thenReturn(ResponseEntity.ok(Map.of("roles", List.of("ROLE_EMPLOYEE"))));
+
+        Map<String, Object> result = adminApprovalService.approveLeave(1L, "OK", "ADM001", "ROLE_ADMIN");
         assertEquals("QUEUED", result.get("status"));
         verify(rabbitTemplate, times(1)).convertAndSend(eq(RabbitMQConfig.EXCHANGE), eq(RabbitMQConfig.LEAVE_ROUTING_KEY), any(Map.class));
     }
 
     @Test
     void testRejectLeave() {
-        Map<String, Object> result = adminApprovalService.rejectLeave(1L, "No");
+        when(leaveClient.getPendingLeaveRequests()).thenReturn(ResponseEntity.ok(List.of(Map.of("id", 1L, "employeeCode", "EMP001"))));
+        when(identityClient.getUserSummary("EMP001")).thenReturn(ResponseEntity.ok(Map.of("roles", List.of("ROLE_EMPLOYEE"))));
+
+        Map<String, Object> result = adminApprovalService.rejectLeave(1L, "No", "ADM001", "ROLE_ADMIN");
         assertEquals("QUEUED", result.get("status"));
         verify(rabbitTemplate, times(1)).convertAndSend(eq(RabbitMQConfig.EXCHANGE), eq(RabbitMQConfig.LEAVE_ROUTING_KEY), any(Map.class));
+    }
+
+    @Test
+    void testManagerCanApproveAdminLeave() {
+        when(leaveClient.getPendingLeaveRequests()).thenReturn(ResponseEntity.ok(List.of(Map.of("id", 1L, "employeeCode", "ADM001"))));
+        when(identityClient.getUserSummary("ADM001")).thenReturn(ResponseEntity.ok(Map.of("roles", List.of("ROLE_ADMIN"))));
+
+        Map<String, Object> result = adminApprovalService.approveLeave(1L, "OK", "MGR001", "ROLE_MANAGER");
+
+        assertEquals("QUEUED", result.get("status"));
+        verify(rabbitTemplate, times(1)).convertAndSend(eq(RabbitMQConfig.EXCHANGE), eq(RabbitMQConfig.LEAVE_ROUTING_KEY), any(Map.class));
+    }
+
+    @Test
+    void testAdminCannotApproveAdminLeave() {
+        when(leaveClient.getPendingLeaveRequests()).thenReturn(ResponseEntity.ok(List.of(Map.of("id", 1L, "employeeCode", "ADM001"))));
+        when(identityClient.getUserSummary("ADM001")).thenReturn(ResponseEntity.ok(Map.of("roles", List.of("ROLE_ADMIN"))));
+
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> adminApprovalService.approveLeave(1L, "OK", "ADM002", "ROLE_ADMIN"));
+
+        assertEquals("Admin leave requests must be approved by a manager", exception.getMessage());
+        verify(rabbitTemplate, never()).convertAndSend(eq(RabbitMQConfig.EXCHANGE), eq(RabbitMQConfig.LEAVE_ROUTING_KEY), any(Map.class));
+    }
+
+    @Test
+    void testApproverCannotApproveOwnLeave() {
+        when(leaveClient.getPendingLeaveRequests()).thenReturn(ResponseEntity.ok(List.of(Map.of("id", 1L, "employeeCode", "ADM001"))));
+
+        BadRequestException exception = assertThrows(BadRequestException.class,
+                () -> adminApprovalService.rejectLeave(1L, "No", "ADM001", "ROLE_MANAGER"));
+
+        assertEquals("You cannot approve or reject your own leave request", exception.getMessage());
+        verify(rabbitTemplate, never()).convertAndSend(eq(RabbitMQConfig.EXCHANGE), eq(RabbitMQConfig.LEAVE_ROUTING_KEY), any(Map.class));
     }
 }

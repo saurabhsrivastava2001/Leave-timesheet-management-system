@@ -24,7 +24,7 @@ public class Timesheet {
     
     private String managerComments;
 
-    @OneToMany(mappedBy = "timesheet", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "timesheet", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<TimesheetEntry> entries;
 
     @Column(updatable = false)

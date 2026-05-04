@@ -151,3 +151,4 @@ Or filter a single service:
 ```logql
 {job="leave-management", service="identity-service"}
 ```
+See [PROJECT_WORKING_GUIDE.md](./PROJECT_WORKING_GUIDE.md) for the full walkthrough of setup, roles, leave schemes, employee onboarding, project creation, admin behavior, and end-to-end usage.

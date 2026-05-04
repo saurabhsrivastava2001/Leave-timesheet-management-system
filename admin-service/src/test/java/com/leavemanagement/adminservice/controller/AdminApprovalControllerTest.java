@@ -59,16 +59,22 @@ public class AdminApprovalControllerTest {
 
     @Test
     void testApproveLeave() throws Exception {
-        when(adminApprovalService.approveLeave(1L, "OK")).thenReturn(Map.of("status", "QUEUED"));
-        mockMvc.perform(post("/api/admin/approvals/leaves/1/approve").param("comments", "OK"))
+        when(adminApprovalService.approveLeave(1L, "OK", "MGR001", "ROLE_MANAGER")).thenReturn(Map.of("status", "QUEUED"));
+        mockMvc.perform(post("/api/admin/approvals/leaves/1/approve")
+                .header("X-Employee-Code", "MGR001")
+                .header("X-User-Roles", "ROLE_MANAGER")
+                .param("comments", "OK"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("QUEUED"));
     }
 
     @Test
     void testRejectLeave() throws Exception {
-        when(adminApprovalService.rejectLeave(1L, "No")).thenReturn(Map.of("status", "QUEUED"));
-        mockMvc.perform(post("/api/admin/approvals/leaves/1/reject").param("comments", "No"))
+        when(adminApprovalService.rejectLeave(1L, "No", "MGR001", "ROLE_MANAGER")).thenReturn(Map.of("status", "QUEUED"));
+        mockMvc.perform(post("/api/admin/approvals/leaves/1/reject")
+                .header("X-Employee-Code", "MGR001")
+                .header("X-User-Roles", "ROLE_MANAGER")
+                .param("comments", "No"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("QUEUED"));
     }

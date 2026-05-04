@@ -3,6 +3,7 @@ package com.leavemanagement.identityservice.controller;
 import com.leavemanagement.identityservice.dto.AuthResponse;
 import com.leavemanagement.identityservice.dto.LoginRequest;
 import com.leavemanagement.identityservice.dto.SignupRequest;
+import com.leavemanagement.identityservice.dto.UserSummaryResponse;
 import com.leavemanagement.identityservice.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -32,5 +33,11 @@ public class AuthController {
     public ResponseEntity<AuthResponse> authenticateUser(@Valid @RequestBody LoginRequest loginRequest) {
         AuthResponse authResponse = authService.authenticateUser(loginRequest);
         return ResponseEntity.ok(authResponse);
+    }
+
+    @GetMapping("/internal/users/{employeeCode}")
+    @Operation(summary = "Get user summary for internal service authorization checks")
+    public ResponseEntity<UserSummaryResponse> getUserSummary(@PathVariable String employeeCode) {
+        return ResponseEntity.ok(authService.getUserSummary(employeeCode));
     }
 }

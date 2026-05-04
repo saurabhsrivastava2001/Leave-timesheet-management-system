@@ -4,6 +4,7 @@ package com.leavemanagement.identityservice.service;
 import com.leavemanagement.identityservice.dto.AuthResponse;
 import com.leavemanagement.identityservice.dto.LoginRequest;
 import com.leavemanagement.identityservice.dto.SignupRequest;
+import com.leavemanagement.identityservice.dto.UserSummaryResponse;
 import com.leavemanagement.identityservice.entity.User;
 import com.leavemanagement.identityservice.exception.BadRequestException;
 import com.leavemanagement.identityservice.exception.ResourceNotFoundException;
@@ -71,5 +72,12 @@ public class AuthServiceImpl implements AuthService {
 
         String jwt = tokenProvider.generateToken(user.getEmployeeCode(), user.getRoles());
         return new AuthResponse(jwt, user.getEmployeeCode(), user.getName(), user.getRoles());
+    }
+
+    @Override
+    public UserSummaryResponse getUserSummary(String employeeCode) {
+        User user = userRepository.findByEmployeeCode(employeeCode)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found with employee code: " + employeeCode));
+        return new UserSummaryResponse(user.getEmployeeCode(), user.getName(), user.getEmail(), user.getRoles());
     }
 }

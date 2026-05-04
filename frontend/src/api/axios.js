@@ -10,11 +10,19 @@ api.interceptors.request.use(
   (config) => {
     const token = localStorage.getItem('jwt_token');
     const employeeCode = localStorage.getItem('employeeCode');
+    const userRoles = localStorage.getItem('userRoles');
     if (token) {
       config.headers['Authorization'] = `Bearer ${token}`;
     }
     if (employeeCode) {
       config.headers['X-Employee-Code'] = employeeCode;
+    }
+    if (userRoles) {
+      try {
+        config.headers['X-User-Roles'] = JSON.parse(userRoles).join(',');
+      } catch {
+        config.headers['X-User-Roles'] = userRoles;
+      }
     }
     return config;
   },

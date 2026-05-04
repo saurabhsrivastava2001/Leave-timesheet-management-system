@@ -29,13 +29,8 @@ const Navbar = () => {
               <Link to="/leaves" className="nav-link">Leaves</Link>
               <Link to="/timesheets" className="nav-link">Timesheets</Link>
               
-              {/* Conditionally render admin link if user is Admin/Manager (for demo, any role is fine or ROLE_ADMIN) */}
               {(user?.roles?.includes('ROLE_ADMIN') || user?.roles?.includes('ROLE_MANAGER')) && (
                  <Link to="/admin" className="nav-link" style={{ color: '#ec4899' }}>Admin</Link>
-              )}
-              {/* Just for ease of testing until DB is fully seeded, show it to ROLE_EMPLOYEE too or anyone having 'ROLE_EMPLOYEE' */}
-              {user?.roles?.includes('ROLE_EMPLOYEE') && !user?.roles?.includes('ROLE_ADMIN') && (
-                 <Link to="/admin" className="nav-link" style={{ color: '#ec4899' }}>Admin (Test Mode)</Link>
               )}
 
               <div className="user-menu">

@@ -1,22 +1,35 @@
 import api from './axios';
 
 export const timesheetApi = {
-  // Log weekly timesheet entries
-  logEntries: async (timesheetData) => {
-    // Via Gateway: /timesheet/api/timesheet/entries
-    // timesheetData: { weekStartDate, entries: [{ projectCode, workDate, hours, taskSummary }] }
-    // Add employeeCode manually if missing:
-    const employeeCode = localStorage.getItem('employeeCode');
-    const payload = { ...timesheetData, employeeCode };
-    const response = await api.post('/timesheet/api/timesheet/entries', payload);
+  getWeek: async (weekStartDate) => {
+    try {
+      const response = await api.get(`/timesheet/api/timesheet/weeks/${weekStartDate}`);
+      return response.data;
+    } catch (error) {
+      if (error.response?.status === 404) {
+        return null;
+      }
+      throw error;
+    }
+  },
+
+  getHistory: async () => {
+    const response = await api.get('/timesheet/api/timesheet/history');
     return response.data;
   },
 
-  // Submit timesheet
+  getProjects: async () => {
+    const response = await api.get('/timesheet/api/timesheet/projects');
+    return response.data;
+  },
+
+  saveWeek: async (weekStartDate, timesheetData) => {
+    const response = await api.put(`/timesheet/api/timesheet/weeks/${weekStartDate}`, timesheetData);
+    return response.data;
+  },
+
   submitTimesheet: async (weekStartDate) => {
     const response = await api.post(`/timesheet/api/timesheet/weeks/${weekStartDate}/submit`);
     return response.data;
   },
-
-  // (If there was a GET endpoint to fetch them, we'd add it here. The documentation doesn't specify one, but usually it exists)
 };

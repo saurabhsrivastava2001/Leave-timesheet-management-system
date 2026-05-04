@@ -1,6 +1,7 @@
 package com.leavemanagement.timesheetservice.controller;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.leavemanagement.timesheetservice.dto.ProjectSummaryDto;
 import com.leavemanagement.timesheetservice.dto.TimesheetDto;
 import com.leavemanagement.timesheetservice.dto.TimesheetEntryDto;
 import com.leavemanagement.timesheetservice.service.TimesheetService;
@@ -69,7 +70,7 @@ public class TimesheetControllerTest {
         responseDto.setStatus("DRAFT");
         responseDto.setEmployeeCode("EMP001");
 
-        when(timesheetService.saveOrUpdateTimesheet(any(TimesheetDto.class))).thenReturn(responseDto);
+        when(timesheetService.saveOrUpdateTimesheet(eq("EMP001"), any(TimesheetDto.class))).thenReturn(responseDto);
 
         mockMvc.perform(post("/api/timesheet/entries")
                 .header("X-Employee-Code", "EMP001")
@@ -77,6 +78,29 @@ public class TimesheetControllerTest {
                 .content(objectMapper.writeValueAsString(requestDto)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("DRAFT"));
+    }
+
+    @Test
+    void testGetTimesheetHistory() throws Exception {
+        TimesheetDto dto = new TimesheetDto();
+        dto.setWeekStartDate(LocalDate.of(2025, 1, 6));
+        dto.setStatus("SUBMITTED");
+
+        when(timesheetService.getTimesheetHistory("EMP001")).thenReturn(List.of(dto));
+
+        mockMvc.perform(get("/api/timesheet/history")
+                .header("X-Employee-Code", "EMP001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].status").value("SUBMITTED"));
+    }
+
+    @Test
+    void testGetProjects() throws Exception {
+        when(timesheetService.getActiveProjects()).thenReturn(List.of(new ProjectSummaryDto("PROJ01", "Project Alpha")));
+
+        mockMvc.perform(get("/api/timesheet/projects"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].projectCode").value("PROJ01"));
     }
 
     @Test

@@ -15,7 +15,6 @@ export const adminApi = {
 
   // Create Policy
   createPolicy: async (policyData) => {
-    // Via Gateway: /admin/api/admin/master/policies
     const response = await api.post('/admin/api/admin/master/policies', policyData);
     return response.data;
   },

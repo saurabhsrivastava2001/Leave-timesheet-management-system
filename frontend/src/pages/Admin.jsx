@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import { adminApi } from '../api/adminApi';
+import { getApiErrorMessage } from '../api/errors';
 import './Leaves.css';
 
 const Admin = () => {
@@ -15,17 +16,23 @@ const Admin = () => {
   const [holidayDate, setHolidayDate] = useState('');
   const [holidayDesc, setHolidayDesc] = useState('');
 
+  const getEmployeeDisplay = (item) => (
+    item.employeeName || item.name || item.employeeCode || item.employee || 'Unknown employee'
+  );
+
   const fetchData = async () => {
     setIsLoading(true);
     try {
       if (activeTab === 'timesheets') {
         const d = await adminApi.getPendingTimesheets();
-        setPendingTimesheets(d || []);
+        setPendingTimesheets(Array.isArray(d) ? d.filter((item) => !item.error) : []);
       } else if (activeTab === 'leaves') {
         const d = await adminApi.getPendingLeaves();
-        setPendingLeaves(d || []);
+        setPendingLeaves(Array.isArray(d) ? d.filter((item) => !item.error) : []);
       }
-    } catch { /* permissions issues are expected for employees */ }
+    } catch (error) {
+      setMsg({ text: getApiErrorMessage(error, 'Could not load admin data.'), type: 'error' });
+    }
     finally { setIsLoading(false); }
   };
 
@@ -38,7 +45,7 @@ const Admin = () => {
       await adminApi.approveTimesheet(id, status, comments);
       setMsg({ text: `Timesheet #${id} ${status}`, type: status === 'APPROVED' ? 'success' : 'error' });
       setPendingTimesheets(p => p.filter(t => t.id !== id));
-    } catch { setMsg({ text: 'Action failed.', type: 'error' }); }
+    } catch (error) { setMsg({ text: getApiErrorMessage(error, 'Action failed.'), type: 'error' }); }
   };
 
   const handleApproveLeave = async (id, status) => {
@@ -48,7 +55,7 @@ const Admin = () => {
       await adminApi.approveLeave(id, status, comments);
       setMsg({ text: `Leave #${id} ${status}`, type: status === 'APPROVED' ? 'success' : 'error' });
       setPendingLeaves(p => p.filter(l => l.id !== id));
-    } catch { setMsg({ text: 'Action failed.', type: 'error' }); }
+    } catch (error) { setMsg({ text: getApiErrorMessage(error, 'Action failed.'), type: 'error' }); }
   };
 
   const handleCreateHoliday = async (e) => {
@@ -57,7 +64,7 @@ const Admin = () => {
       await adminApi.createHoliday({ date: holidayDate, description: holidayDesc });
       setMsg({ text: 'Holiday created!', type: 'success' });
       setHolidayDate(''); setHolidayDesc('');
-    } catch { setMsg({ text: 'Failed to create holiday.', type: 'error' }); }
+    } catch (error) { setMsg({ text: getApiErrorMessage(error, 'Failed to create holiday.'), type: 'error' }); }
   };
 
   return (
@@ -115,7 +122,7 @@ const Admin = () => {
                       {pendingLeaves.map(lv => (
                         <tr key={lv.id}>
                           <td style={{ color: 'var(--color-text-muted)' }}>{lv.id}</td>
-                          <td style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{lv.employeeCode}</td>
+                          <td style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{getEmployeeDisplay(lv)}</td>
                           <td>{lv.leaveType}</td>
                           <td>{lv.startDate} → {lv.endDate}</td>
                           <td style={{ maxWidth: 180, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{lv.reason}</td>
@@ -161,7 +168,7 @@ const Admin = () => {
                       {pendingTimesheets.map(ts => (
                         <tr key={ts.id}>
                           <td style={{ color: 'var(--color-text-muted)' }}>{ts.id}</td>
-                          <td style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{ts.employeeCode}</td>
+                          <td style={{ fontWeight: 600, color: 'var(--color-text-primary)' }}>{getEmployeeDisplay(ts)}</td>
                           <td>{ts.weekStartDate}</td>
                           <td>
                             <div className="action-cell">

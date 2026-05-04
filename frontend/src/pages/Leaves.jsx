@@ -2,6 +2,17 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import { useAuth } from '../context/AuthContext';
 import { leaveApi } from '../api/leaveApi';
+import { getApiErrorMessage } from '../api/errors';
+
+const leaveTypeLabels = {
+  EARNED: 'Earned Leave',
+  SICK: 'Sick Leave',
+  CASUAL: 'Casual Leave',
+};
+
+const getAvailableBalance = (leaveBalance) => (
+  Number(leaveBalance?.availableBalance ?? ((leaveBalance?.allocated ?? 0) - (leaveBalance?.consumed ?? 0)))
+);
 
 const Leaves = () => {
   const { user } = useAuth();
@@ -16,6 +27,10 @@ const Leaves = () => {
   const [msg,        setMsg]        = useState({ text: '', type: '' });
   const [submitting, setSubmitting] = useState(false);
 
+  const availableTypes = Array.isArray(balance) ? balance.filter((b) => getAvailableBalance(b) > 0) : [];
+  const selectedBalance = Array.isArray(balance) ? balance.find((b) => b.leaveType === leaveType) : null;
+  const canApply = Boolean(selectedBalance && getAvailableBalance(selectedBalance) > 0);
+
   const fetchData = async () => {
     setIsLoading(true);
     try {
@@ -23,7 +38,13 @@ const Leaves = () => {
         leaveApi.getBalance(user.employeeCode),
         leaveApi.getMyLeaves(),
       ]);
-      if (bal.status === 'fulfilled') setBalance(bal.value || []);
+      if (bal.status === 'fulfilled') {
+        const nextBalance = bal.value || [];
+        setBalance(nextBalance);
+        if (Array.isArray(nextBalance) && nextBalance.length > 0 && !nextBalance.some((b) => b.leaveType === leaveType)) {
+          setLeaveType(nextBalance[0].leaveType);
+        }
+      }
       if (hist.status === 'fulfilled') setHistory(hist.value || []);
     } catch (err) { console.error(err); }
     finally { setIsLoading(false); }
@@ -36,18 +57,23 @@ const Leaves = () => {
     setSubmitting(true);
     setMsg({ text: '', type: '' });
     try {
+      if (!selectedBalance) {
+        throw new Error(`No leave balance record found for type: ${leaveType}`);
+      }
+      if (getAvailableBalance(selectedBalance) <= 0) {
+        throw new Error(`Insufficient balance for leave type: ${leaveType}`);
+      }
+      if (new Date(`${startDate}T00:00:00`) > new Date(`${endDate}T00:00:00`)) {
+        throw new Error('Start date cannot be after end date');
+      }
       await leaveApi.applyLeave({ leaveType, startDate, endDate, reason });
       setMsg({ text: 'Leave request submitted!', type: 'success' });
       setStartDate(''); setEndDate(''); setReason('');
       fetchData();
-    } catch {
-      setMsg({ text: 'Failed to submit. Check your balance or dates.', type: 'error' });
+    } catch (error) {
+      setMsg({ text: getApiErrorMessage(error, 'Failed to submit. Check your balance or dates.'), type: 'error' });
     } finally { setSubmitting(false); }
   };
-
-  const earnedBal = Array.isArray(balance)
-    ? balance.find(b => b.leaveType === 'EARNED')
-    : null;
 
   return (
     <div className="app-shell">
@@ -69,7 +95,7 @@ const Leaves = () => {
               {Array.isArray(balance) && balance.length > 0 ? balance.map((b, i) => (
                 <div key={i} className="balance-badge">
                   <div className="balance-badge-type">{b.leaveType}</div>
-                  <div className="balance-badge-num">{b.allocated - b.consumed}</div>
+                  <div className="balance-badge-num">{getAvailableBalance(b)}</div>
                   <div className="balance-badge-label">of {b.allocated} days left</div>
                 </div>
               )) : (
@@ -90,14 +116,23 @@ const Leaves = () => {
               <h3 className="card-section-title">Apply for Leave</h3>
 
               {msg.text && <div className={`message-banner ${msg.type}`}>{msg.text}</div>}
+              {!isLoading && !canApply && !msg.text && (
+                <div className="message-banner error">
+                  No leave balance is available for this employee yet.
+                </div>
+              )}
 
               <form onSubmit={handleApply}>
                 <div className="form-group">
                   <label className="form-label">Leave Type</label>
                   <select className="form-input" value={leaveType} onChange={e => setLeaveType(e.target.value)}>
-                    <option value="EARNED">Earned Leave</option>
-                    <option value="SICK">Sick Leave</option>
-                    <option value="CASUAL">Casual Leave</option>
+                    {availableTypes.length > 0 ? availableTypes.map((b) => (
+                      <option key={b.leaveType} value={b.leaveType}>
+                        {leaveTypeLabels[b.leaveType] || b.leaveType} ({getAvailableBalance(b)} days left)
+                      </option>
+                    )) : (
+                      <option value={leaveType}>{leaveTypeLabels[leaveType] || leaveType}</option>
+                    )}
                   </select>
                 </div>
 
@@ -117,7 +152,7 @@ const Leaves = () => {
                   <textarea className="form-input" rows="3" value={reason} onChange={e => setReason(e.target.value)} required placeholder="Briefly describe your reason..." />
                 </div>
 
-                <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={submitting}>
+                <button type="submit" className="btn btn-primary" style={{ width: '100%' }} disabled={submitting || !canApply}>
                   {submitting ? 'Submitting…' : '→ Submit Request'}
                 </button>
               </form>

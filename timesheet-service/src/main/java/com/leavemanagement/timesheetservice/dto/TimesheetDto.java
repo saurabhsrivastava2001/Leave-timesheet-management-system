@@ -7,16 +7,15 @@ import java.util.List;
 
 public class TimesheetDto {
     private Long id;
-    
-    
     private String employeeCode;
-    
+
     @NotNull(message = "Week start date is required")
     private LocalDate weekStartDate;
-    
+
     private String status;
     private String managerComments;
-    
+    private Double totalHours;
+
     @Valid
     private List<TimesheetEntryDto> entries;
 
@@ -61,6 +60,14 @@ public class TimesheetDto {
 
     public void setManagerComments(String managerComments) {
         this.managerComments = managerComments;
+    }
+
+    public Double getTotalHours() {
+        return totalHours;
+    }
+
+    public void setTotalHours(Double totalHours) {
+        this.totalHours = totalHours;
     }
 
     public List<TimesheetEntryDto> getEntries() {

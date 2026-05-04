@@ -35,6 +35,7 @@ public class ModelTest {
 
         LeaveRequestDto lr = new LeaveRequestDto();
         lr.setId(1L);
+        lr.setEmployeeCode("EMP001");
         lr.setLeaveType("ANNUAL");
         lr.setStartDate(LocalDate.now());
         lr.setEndDate(LocalDate.now());
@@ -42,6 +43,7 @@ public class ModelTest {
         lr.setReason("Vacation");
         lr.setManagerComments("OK");
         assertEquals("ANNUAL", lr.getLeaveType());
+        assertEquals("EMP001", lr.getEmployeeCode());
         assertEquals(1L, lr.getId());
         assertEquals("Vacation", lr.getReason());
         assertEquals("APPROVED", lr.getStatus());

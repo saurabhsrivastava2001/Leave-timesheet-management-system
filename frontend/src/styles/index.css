@@ -335,6 +335,11 @@ input, select, textarea { font-family: inherit; width: 100%; }
 
 .form-input::placeholder { color: var(--color-text-muted); }
 
+select.form-input option {
+  background: var(--color-bg-raised);
+  color: var(--color-text-primary);
+}
+
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: var(--sp-4); }
 .form-row .form-group { margin-bottom: 0; }
 

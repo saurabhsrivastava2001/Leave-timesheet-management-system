@@ -11,6 +11,9 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
+import java.util.Collection;
+import java.util.stream.Collectors;
+
 @Component
 public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAuthenticationFilter.Config> {
 
@@ -44,10 +47,19 @@ public class JwtAuthenticationFilter extends AbstractGatewayFilterFactory<JwtAut
                     return onError(exchange, "Invalid Token", HttpStatus.UNAUTHORIZED);
                 }
                 
-                String employeeCode = jwtUtil.getClaims(authHeader).getSubject();
+                var claims = jwtUtil.getClaims(authHeader);
+                String employeeCode = claims.getSubject();
+                Object rolesClaim = claims.get("roles");
+                String roles = "";
+                if (rolesClaim instanceof Collection<?> rolesCollection) {
+                    roles = rolesCollection.stream().map(Object::toString).collect(Collectors.joining(","));
+                } else if (rolesClaim != null) {
+                    roles = rolesClaim.toString();
+                }
                 ServerHttpRequest request = exchange.getRequest()
                         .mutate()
                         .header("X-Employee-Code", employeeCode)
+                        .header("X-User-Roles", roles)
                         .build();
                 return chain.filter(exchange.mutate().request(request).build());
             }

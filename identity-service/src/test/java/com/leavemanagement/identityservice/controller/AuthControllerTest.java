@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.leavemanagement.identityservice.dto.AuthResponse;
 import com.leavemanagement.identityservice.dto.LoginRequest;
 import com.leavemanagement.identityservice.dto.SignupRequest;
+import com.leavemanagement.identityservice.dto.UserSummaryResponse;
 import com.leavemanagement.identityservice.service.AuthService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,6 +19,7 @@ import java.util.Collections;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(AuthController.class)
@@ -67,5 +69,22 @@ public class AuthControllerTest {
                 .andExpect(jsonPath("$.token").value("mock_token"))
                 .andExpect(jsonPath("$.employeeCode").value("EMP123"))
                 .andExpect(jsonPath("$.name").value("John Doe"));
+    }
+
+    @Test
+    void testGetUserSummary() throws Exception {
+        UserSummaryResponse response = new UserSummaryResponse(
+                "ADM001",
+                "Admin User",
+                "admin@example.com",
+                Collections.singleton("ROLE_ADMIN"));
+
+        when(authService.getUserSummary("ADM001")).thenReturn(response);
+
+        mockMvc.perform(get("/api/auth/internal/users/ADM001"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.employeeCode").value("ADM001"))
+                .andExpect(jsonPath("$.name").value("Admin User"))
+                .andExpect(jsonPath("$.roles[0]").value("ROLE_ADMIN"));
     }
 }

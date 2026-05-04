@@ -10,14 +10,14 @@ export default defineConfig({
       '/auth': {
         target: 'http://localhost:8080',
         changeOrigin: true,
-        secure: false, // In case of development
+        secure: false
       },
-      '/timesheet': {
+      '/leave': {
         target: 'http://localhost:8080',
         changeOrigin: true,
         secure: false
       },
-      '/leave': {
+      '/timesheet': {
         target: 'http://localhost:8080',
         changeOrigin: true,
         secure: false

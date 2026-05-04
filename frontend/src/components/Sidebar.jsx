@@ -36,7 +36,7 @@ const IconLogout = () => (
 const Sidebar = () => {
   const { user, isAuthenticated, logout } = useAuth();
   const navigate = useNavigate();
-  const isAdmin = user?.roles?.includes('ROLE_ADMIN') || user?.roles?.includes('ROLE_MANAGER') || user?.roles?.includes('ROLE_EMPLOYEE');
+  const canManage = user?.roles?.includes('ROLE_ADMIN') || user?.roles?.includes('ROLE_MANAGER');
 
   const handleLogout = () => { logout(); navigate('/login'); };
   const initials = user?.employeeCode ? user.employeeCode.slice(0, 2).toUpperCase() : '??';
@@ -68,7 +68,7 @@ const Sidebar = () => {
           <IconTimesheet /> Timesheets
         </NavLink>
 
-        {isAdmin && (
+        {canManage && (
           <>
             <span className="sidebar-section-label">Management</span>
             <NavLink to="/admin" className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}>

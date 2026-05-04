@@ -17,8 +17,8 @@ public class LeaveApprovalListener {
     @RabbitListener(queues = RabbitMQConfig.LEAVE_QUEUE)
     public void handleLeaveApproval(Map<String, Object> payload) {
         try {
-            Long id = Long.valueOf(payload.get("id").toString());
-            String status = (String) payload.get("status");
+            Long id = readId(payload);
+            String status = readStatus(payload);
             String comments = (String) payload.get("comments");
 
             System.out.println(">>> [RabbitMQ CONSUMER] Processing Async Leave Approval | ID: " + id + " | Status: " + status);
@@ -27,5 +27,21 @@ public class LeaveApprovalListener {
         } catch (Exception e) {
             System.err.println("!!! [RabbitMQ ERROR] Failed to process leave async event: " + e.getMessage());
         }
+    }
+
+    private Long readId(Map<String, Object> payload) {
+        Object id = payload.get("id");
+        if (id == null) {
+            throw new IllegalArgumentException("Missing leave request id");
+        }
+        return Long.valueOf(id.toString());
+    }
+
+    private String readStatus(Map<String, Object> payload) {
+        Object status = payload.get("status");
+        if (status == null || status.toString().isBlank()) {
+            throw new IllegalArgumentException("Missing leave approval status");
+        }
+        return status.toString();
     }
 }

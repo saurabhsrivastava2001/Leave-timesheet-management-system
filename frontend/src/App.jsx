@@ -21,6 +21,23 @@ const ProtectedRoute = ({ children }) => {
   return children;
 };
 
+const RoleProtectedRoute = ({ children, allowedRoles }) => {
+  const { user, isAuthenticated, loading } = useAuth();
+
+  if (loading) return null;
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  const hasAllowedRole = user?.roles?.some((role) => allowedRoles.includes(role));
+  if (!hasAllowedRole) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+};
+
 function App() {
   return (
     <Router>
@@ -31,7 +48,10 @@ function App() {
         <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
         <Route path="/leaves" element={<ProtectedRoute><Leaves /></ProtectedRoute>} />
         <Route path="/timesheets" element={<ProtectedRoute><Timesheets /></ProtectedRoute>} />
-        <Route path="/admin" element={<ProtectedRoute><Admin /></ProtectedRoute>} />
+        <Route
+          path="/admin"
+          element={<RoleProtectedRoute allowedRoles={['ROLE_ADMIN', 'ROLE_MANAGER']}><Admin /></RoleProtectedRoute>}
+        />
         
         {/* Fallback route */}
         <Route path="*" element={<Navigate to="/" replace />} />

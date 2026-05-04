@@ -98,7 +98,7 @@ const Dashboard = () => {
     })();
   }, [user, isManager]);
 
-  const avail = balance ? balance.allocated - balance.consumed : 0;
+  const avail = balance ? Number(balance.availableBalance ?? ((balance.allocated ?? 0) - (balance.consumed ?? 0))) : 0;
   const total = balance ? balance.allocated : 0;
   const pct   = total ? Math.round((balance.consumed / total) * 100) : 0;
 

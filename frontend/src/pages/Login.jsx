@@ -16,7 +16,10 @@ const Login = () => {
     try {
       const ok = await login(username, password);
       if (ok) navigate('/'); else setError('Invalid credentials. Please try again.');
-    } catch { setError('Login failed. Check your connection or credentials.'); }
+    } catch (err) {
+      const message = err.response?.data?.message || err.response?.data?.error || err.response?.data;
+      setError(typeof message === 'string' ? message : 'Login failed. Check your connection or credentials.');
+    }
     finally { setLoading(false); }
   };
 

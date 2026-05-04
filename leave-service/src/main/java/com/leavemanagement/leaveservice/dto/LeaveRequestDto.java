@@ -6,6 +6,7 @@ import java.time.LocalDate;
 
 public class LeaveRequestDto {
     private Long id;
+    private String employeeCode;
 
     @NotBlank(message = "Leave type is required")
     private String leaveType;
@@ -29,6 +30,14 @@ public class LeaveRequestDto {
 
     public void setId(Long id) {
         this.id = id;
+    }
+
+    public String getEmployeeCode() {
+        return employeeCode;
+    }
+
+    public void setEmployeeCode(String employeeCode) {
+        this.employeeCode = employeeCode;
     }
 
     public String getLeaveType() {

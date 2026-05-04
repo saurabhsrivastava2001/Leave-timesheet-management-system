@@ -44,13 +44,21 @@ public class AdminApprovalController {
 
     @PostMapping("/leaves/{id}/approve")
     @Operation(summary = "Approve leave request")
-    public ResponseEntity<Map<String, Object>> approveLeave(@PathVariable Long id, @RequestParam(required = false) String comments) {
-        return ResponseEntity.ok(adminApprovalService.approveLeave(id, comments));
+    public ResponseEntity<Map<String, Object>> approveLeave(
+            @PathVariable Long id,
+            @RequestParam(required = false) String comments,
+            @RequestHeader("X-Employee-Code") String approverEmployeeCode,
+            @RequestHeader(value = "X-User-Roles", required = false) String approverRoles) {
+        return ResponseEntity.ok(adminApprovalService.approveLeave(id, comments, approverEmployeeCode, approverRoles));
     }
 
     @PostMapping("/leaves/{id}/reject")
     @Operation(summary = "Reject leave request")
-    public ResponseEntity<Map<String, Object>> rejectLeave(@PathVariable Long id, @RequestParam String comments) {
-        return ResponseEntity.ok(adminApprovalService.rejectLeave(id, comments));
+    public ResponseEntity<Map<String, Object>> rejectLeave(
+            @PathVariable Long id,
+            @RequestParam String comments,
+            @RequestHeader("X-Employee-Code") String approverEmployeeCode,
+            @RequestHeader(value = "X-User-Roles", required = false) String approverRoles) {
+        return ResponseEntity.ok(adminApprovalService.rejectLeave(id, comments, approverEmployeeCode, approverRoles));
     }
 }

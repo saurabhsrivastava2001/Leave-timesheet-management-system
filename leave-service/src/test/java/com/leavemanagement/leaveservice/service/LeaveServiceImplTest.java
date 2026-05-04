@@ -70,15 +70,16 @@ public class LeaveServiceImplTest {
         when(leaveBalanceRepository.findByEmployeeCodeAndLeaveType("EMP001", "SICK"))
                 .thenReturn(Optional.of(balance));
 
-        LeaveRequest savedRequest = new LeaveRequest();
-        savedRequest.setId(1L);
-        savedRequest.setLeaveType("SICK");
-        savedRequest.setStatus("SUBMITTED");
-        when(leaveRequestRepository.save(any(LeaveRequest.class))).thenReturn(savedRequest);
+        when(leaveRequestRepository.save(any(LeaveRequest.class))).thenAnswer(invocation -> {
+            LeaveRequest savedRequest = invocation.getArgument(0);
+            savedRequest.setId(1L);
+            return savedRequest;
+        });
 
         LeaveRequestDto result = leaveService.applyForLeave("EMP001", requestDto);
 
         assertNotNull(result);
+        assertEquals("EMP001", result.getEmployeeCode());
         assertEquals("SUBMITTED", result.getStatus());
         verify(leaveRequestRepository, times(1)).save(any(LeaveRequest.class));
     }

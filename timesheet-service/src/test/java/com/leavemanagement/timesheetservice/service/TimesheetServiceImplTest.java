@@ -100,7 +100,6 @@ public class TimesheetServiceImplTest {
     @Test
     void testSaveOrUpdateTimesheet_NewDraft() {
         TimesheetDto dto = new TimesheetDto();
-        dto.setEmployeeCode("EMP001");
         dto.setWeekStartDate(weekStart);
 
         TimesheetEntryDto entryDto = new TimesheetEntryDto();
@@ -116,7 +115,7 @@ public class TimesheetServiceImplTest {
                 .thenReturn(Optional.of(sampleProject));
         when(timesheetRepository.save(any(Timesheet.class))).thenReturn(sampleTimesheet);
 
-        TimesheetDto result = timesheetService.saveOrUpdateTimesheet(dto);
+        TimesheetDto result = timesheetService.saveOrUpdateTimesheet("EMP001", dto);
         assertNotNull(result);
         verify(timesheetRepository, times(1)).save(any(Timesheet.class));
     }
@@ -126,14 +125,13 @@ public class TimesheetServiceImplTest {
         sampleTimesheet.setStatus("SUBMITTED");
 
         TimesheetDto dto = new TimesheetDto();
-        dto.setEmployeeCode("EMP001");
         dto.setWeekStartDate(weekStart);
 
         when(timesheetRepository.findByEmployeeCodeAndWeekStartDate("EMP001", weekStart))
                 .thenReturn(Optional.of(sampleTimesheet));
 
         assertThrows(BadRequestException.class,
-                () -> timesheetService.saveOrUpdateTimesheet(dto));
+                () -> timesheetService.saveOrUpdateTimesheet("EMP001", dto));
     }
 
     @Test
@@ -141,20 +139,18 @@ public class TimesheetServiceImplTest {
         sampleTimesheet.setStatus("APPROVED");
 
         TimesheetDto dto = new TimesheetDto();
-        dto.setEmployeeCode("EMP001");
         dto.setWeekStartDate(weekStart);
 
         when(timesheetRepository.findByEmployeeCodeAndWeekStartDate("EMP001", weekStart))
                 .thenReturn(Optional.of(sampleTimesheet));
 
         assertThrows(BadRequestException.class,
-                () -> timesheetService.saveOrUpdateTimesheet(dto));
+                () -> timesheetService.saveOrUpdateTimesheet("EMP001", dto));
     }
 
     @Test
     void testSaveOrUpdateTimesheet_ExceedsHoursLimit() {
         TimesheetDto dto = new TimesheetDto();
-        dto.setEmployeeCode("EMP001");
         dto.setWeekStartDate(weekStart);
 
         // Create entries totalling > 60 hours
@@ -175,13 +171,12 @@ public class TimesheetServiceImplTest {
                 .thenReturn(Optional.of(sampleProject));
 
         assertThrows(BadRequestException.class,
-                () -> timesheetService.saveOrUpdateTimesheet(dto));
+                () -> timesheetService.saveOrUpdateTimesheet("EMP001", dto));
     }
 
     @Test
     void testSaveOrUpdateTimesheet_ProjectNotFound() {
         TimesheetDto dto = new TimesheetDto();
-        dto.setEmployeeCode("EMP001");
         dto.setWeekStartDate(weekStart);
 
         TimesheetEntryDto entryDto = new TimesheetEntryDto();
@@ -196,7 +191,7 @@ public class TimesheetServiceImplTest {
                 .thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class,
-                () -> timesheetService.saveOrUpdateTimesheet(dto));
+                () -> timesheetService.saveOrUpdateTimesheet("EMP001", dto));
     }
 
     // ---- submitTimesheet ----
@@ -224,15 +219,33 @@ public class TimesheetServiceImplTest {
     }
 
     @Test
-    void testSubmitTimesheet_InsufficientHours() {
-        // Set hours to < 40
-        sampleTimesheet.getEntries().forEach(e -> e.setHours(2.0)); // 5 * 2 = 10
+    void testSubmitTimesheet_WithoutEntries() {
+        sampleTimesheet.setEntries(new ArrayList<>());
 
         when(timesheetRepository.findByEmployeeCodeAndWeekStartDate("EMP001", weekStart))
                 .thenReturn(Optional.of(sampleTimesheet));
 
         assertThrows(BadRequestException.class,
                 () -> timesheetService.submitTimesheet("EMP001", weekStart));
+    }
+
+    @Test
+    void testSaveOrUpdateTimesheet_RejectsEntryOutsideSelectedWeek() {
+        TimesheetDto dto = new TimesheetDto();
+        dto.setWeekStartDate(weekStart);
+
+        TimesheetEntryDto entryDto = new TimesheetEntryDto();
+        entryDto.setProjectCode("PROJ01");
+        entryDto.setWorkDate(weekStart.plusDays(7));
+        entryDto.setHours(8.0);
+        entryDto.setTaskSummary("Outside week");
+        dto.setEntries(List.of(entryDto));
+
+        when(timesheetRepository.findByEmployeeCodeAndWeekStartDate("EMP001", weekStart))
+                .thenReturn(Optional.empty());
+
+        assertThrows(BadRequestException.class,
+                () -> timesheetService.saveOrUpdateTimesheet("EMP001", dto));
     }
 
     @Test

@@ -26,20 +26,20 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (username, password) => {
     try {
-      // The gateway forwards '/api/auth/login' to the service
-      const response = await api.post('/auth/api/auth/login', { usernameOrEmail: username, password });
+      const usernameOrEmail = username.trim();
+      const response = await api.post('/auth/api/auth/login', { usernameOrEmail, password });
       
       const token = response.data.token || response.data;
       const roles = response.data.roles || ['ROLE_EMPLOYEE'];
 
       if (token && typeof token === 'string') {
         localStorage.setItem('jwt_token', token);
-        localStorage.setItem('employeeCode', response.data.employeeCode || username);
+        localStorage.setItem('employeeCode', response.data.employeeCode || usernameOrEmail);
         localStorage.setItem('userRoles', JSON.stringify(roles));
         
         setIsAuthenticated(true);
         setUser({ 
-          employeeCode: response.data.employeeCode || username,
+          employeeCode: response.data.employeeCode || usernameOrEmail,
           roles: roles
         });
         return true;

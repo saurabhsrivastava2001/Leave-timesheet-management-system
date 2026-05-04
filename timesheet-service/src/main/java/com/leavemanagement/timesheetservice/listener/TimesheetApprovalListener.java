@@ -17,8 +17,8 @@ public class TimesheetApprovalListener {
     @RabbitListener(queues = RabbitMQConfig.TIMESHEET_QUEUE)
     public void handleTimesheetApproval(Map<String, Object> payload) {
         try {
-            Long id = Long.valueOf(payload.get("id").toString());
-            String status = (String) payload.get("status");
+            Long id = readId(payload);
+            String status = readStatus(payload);
             String comments = (String) payload.get("comments");
 
             System.out.println(">>> [RabbitMQ CONSUMER] Processing Async Timesheet Approval | ID: " + id + " | Status: " + status);
@@ -27,5 +27,21 @@ public class TimesheetApprovalListener {
         } catch (Exception e) {
             System.err.println("!!! [RabbitMQ ERROR] Failed to process timesheet async event: " + e.getMessage());
         }
+    }
+
+    private Long readId(Map<String, Object> payload) {
+        Object id = payload.get("id");
+        if (id == null) {
+            throw new IllegalArgumentException("Missing timesheet id");
+        }
+        return Long.valueOf(id.toString());
+    }
+
+    private String readStatus(Map<String, Object> payload) {
+        Object status = payload.get("status");
+        if (status == null || status.toString().isBlank()) {
+            throw new IllegalArgumentException("Missing timesheet approval status");
+        }
+        return status.toString();
     }
 }

@@ -28,7 +28,8 @@ public class LeaveServiceImpl implements LeaveService {
 
     @Override
     public List<LeaveBalanceDto> getLeaveBalances(String employeeCode) {
-        return leaveBalanceRepository.findByEmployeeCode(employeeCode).stream().map(this::mapToBalanceDto).collect(Collectors.toList());
+        return leaveBalanceRepository.findByEmployeeCode(employeeCode).stream().map(this::mapToBalanceDto)
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -39,7 +40,8 @@ public class LeaveServiceImpl implements LeaveService {
         }
 
         // Check overlaps
-        List<LeaveRequest> overlaps = leaveRequestRepository.findOverlappingRequests(employeeCode, dto.getStartDate(), dto.getEndDate());
+        List<LeaveRequest> overlaps = leaveRequestRepository.findOverlappingRequests(employeeCode, dto.getStartDate(),
+                dto.getEndDate());
         if (!overlaps.isEmpty()) {
             throw new BadRequestException("Date range overlaps with existing leave");
         }
@@ -48,7 +50,8 @@ public class LeaveServiceImpl implements LeaveService {
 
         // Check balance
         LeaveBalance balance = leaveBalanceRepository.findByEmployeeCodeAndLeaveType(employeeCode, dto.getLeaveType())
-                .orElseThrow(() -> new BadRequestException("No leave balance record found for type: " + dto.getLeaveType()));
+                .orElseThrow(
+                        () -> new BadRequestException("No leave balance record found for type: " + dto.getLeaveType()));
 
         if (balance.getAvailableBalance() < daysApplied) {
             throw new BadRequestException("Insufficient balance for leave type: " + dto.getLeaveType());
@@ -67,7 +70,8 @@ public class LeaveServiceImpl implements LeaveService {
 
     @Override
     public List<LeaveRequestDto> getLeaveHistory(String employeeCode) {
-        return leaveRequestRepository.findByEmployeeCode(employeeCode).stream().map(this::mapToRequestDto).collect(Collectors.toList());
+        return leaveRequestRepository.findByEmployeeCode(employeeCode).stream().map(this::mapToRequestDto)
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -106,9 +110,10 @@ public class LeaveServiceImpl implements LeaveService {
         if ("APPROVED".equals(status)) {
             // Deduct balance
             long daysApplied = ChronoUnit.DAYS.between(request.getStartDate(), request.getEndDate()) + 1;
-            LeaveBalance balance = leaveBalanceRepository.findByEmployeeCodeAndLeaveType(request.getEmployeeCode(), request.getLeaveType())
+            LeaveBalance balance = leaveBalanceRepository
+                    .findByEmployeeCodeAndLeaveType(request.getEmployeeCode(), request.getLeaveType())
                     .orElseThrow(() -> new ResourceNotFoundException("Balance not found"));
-            
+
             balance.setConsumed(balance.getConsumed() + daysApplied);
             leaveBalanceRepository.save(balance);
         }
@@ -130,6 +135,7 @@ public class LeaveServiceImpl implements LeaveService {
     private LeaveRequestDto mapToRequestDto(LeaveRequest request) {
         LeaveRequestDto dto = new LeaveRequestDto();
         dto.setId(request.getId());
+        dto.setEmployeeCode(request.getEmployeeCode());
         dto.setLeaveType(request.getLeaveType());
         dto.setStartDate(request.getStartDate());
         dto.setEndDate(request.getEndDate());
